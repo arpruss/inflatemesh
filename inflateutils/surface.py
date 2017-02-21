@@ -5,7 +5,12 @@ import itertools
 import os.path
 import math
 
-SQRT2 = math.sqrt(2.)
+class InflationParams(object):
+    def __init__(self, thickness=10., flatness=0., exponent=2., iterations=None):
+        self.thickness = thickness
+        self.flatness = flatness
+        self.exponent = exponent
+        self.iterations = iterations
 
 def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
     # if center is False, the mesh coordinates are guaranteed to be integers corresponding exactly
@@ -79,21 +84,22 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
 
     return mesh
 
-def inflateRaster(raster, thickness=10., flatness=0., iterations=None, 
-        deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), 
-        distanceToEdge=lambda (row,col,i): 1. if i<4 else SQRT2):
+def inflateRaster(raster, inflationParams=InflationParams(), 
+        deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), distanceToEdge=None):
     """
     raster is a boolean matrix.
     
     flatness varies from 0 for a very gradual profile to something around 2-10 for a very flat top.
     
     Here's a rough way to visualize how inflateRaster() works. A random walk starts inside the region
-    defined by the raster. If flatness is zero, it moves around randomly, and the amount of time to
-    exit the region will then yield the inflation height. If flatness is non-zero, in each time
-    step it also has a chance of death proportional to the flatness, and the inflation height is the
-    time until exit or death, whichever comes sooner. So if the flatness parameter is big, then well 
-    within the region, the process will tend to exit via death, and so points well within the region
-    will get similar height. 
+    defined by the raster. If flatness is zero and exponent=1, it moves around randomly, and if T is the amount of time 
+    to exit the region, then (E[T^p])^(1/p) will then yield the inflation height. If flatness is non-zero, in each time
+    step it also has a chance of death proportional to the flatness, and death is deemed to also count as an
+    exit. So if the flatness parameter is big, then well within the region, the process will tend to exit via death, 
+    and so points well within the region will get similar height. 
+    
+    The default exponent value of 1.0 looks pretty good, but you can get nice rounding effects at exponent=2 and larger,
+    and some interesting edge-flattening effects for exponents close to zero.
     
     The flatness parameter is scaled to be approximately invariant across spatial resolution changes,
     and some weighting of the process is used to reduce edge effects via the use of the distanceToEdge 
@@ -102,15 +108,21 @@ def inflateRaster(raster, thickness=10., flatness=0., iterations=None,
     """
     
     deltaLengths = tuple(delta.norm() for delta in deltas)
+    if distanceToEdge == None:
+        distanceToEdge = lambda (x,y,i) : deltaLengths[i]
     
     width = len(raster)
     height = len(raster[0])
 
     k = len(deltas)
-    alpha = 500 * flatness /  max(width,height)**2
+    alpha = 500 * inflationParams.flatness /  max(width,height)**2
+    exponent = inflationParams.exponent
+    invExponent = 1. / exponent
     
-    if not iterations:
-        iterations = 25 * max(width,height) # 60 ?
+    if not inflationParams.iterations:
+        iterations = 25 * max(width,height) 
+    else:
+        iterations = inflationParams.iterations
         
     data = [ [0. for y in range(height)] for x in range(width) ]
     
@@ -134,15 +146,16 @@ def inflateRaster(raster, thickness=10., flatness=0., iterations=None,
                         d = min(distanceToEdge(x,y,i) / deltaLengths[i], 1.)
                         weight = 1./ d
                         w += weight
-                        s += (d + (1-alpha) * z(deltas[i].x, deltas[i].y)) * weight
+                        s += (z(deltas[i].x, deltas[i].y)**invExponent+d)**exponent * weight
                             
-                    newData[x][y] = s / w
+                    newData[x][y] = (1-alpha) * s / w
 
         data = newData
         
+    data = [[point**invExponent for point in col] for col in data]
     maxZ = max(max(col) for col in data)
     
-    return [ [datum / maxZ * thickness for datum in col] for col in data ]
+    return [ [datum / maxZ * inflationParams.thickness for datum in col] for col in data ]
 
 
 if __name__ == '__main__':

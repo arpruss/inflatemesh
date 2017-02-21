@@ -36,8 +36,8 @@ def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, thickness=10., flatness=0., 
-        iterations=None, center=False, twoSided=False, color=None, trim=True, fastDistanceMap=False):
+def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
+        center=False, twoSided=False, color=None, trim=True, fastDistanceMap=False):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
     raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
@@ -100,8 +100,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, t
     def distanceFunction(col, row, i, map=map):
         return map[col][row][i]
     
-    surface = inflateRaster(raster, thickness=thickness, flatness=flatness, iterations=iterations, 
-                    deltas=deltas, distanceToEdge=distanceFunction)
+    surface = inflateRaster(raster, inflationParams=inflationParams, deltas=deltas, distanceToEdge=distanceFunction)
     message("Meshing")
     mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
     
@@ -168,18 +167,17 @@ def sortedApproximatePaths(paths,error=0.1):
         
     return sorted(paths, key=key)
 
-def inflateLinearPath(path, spacing=1., thickness=10., flatness=0., iterations=None, ignoreColor=False):
+def inflateLinearPath(path, spacing=1., inflationParams=None, ignoreColor=False):
     lines = []
     for line in path:
         lines.append((line.start,line.end))
     mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
-    return inflatePolygon(lines, spacing=spacing, thickness=thickness, flatness=flatness, 
-                iterations=iterations, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
+    return inflatePolygon(lines, spacing=spacing, inflationParams=inflationParams, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
 
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, spacing=1., thickness=10., flatness=0., iterations=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
+def inflateSVGFile(svgFile, spacing=1., inflationParams=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
     data = InflatedData()
     data.meshes = []
     data.pointLists = []
@@ -190,7 +188,7 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., flatness=0., iterations=N
     for i,path in enumerate(paths):
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
-            mesh = inflateLinearPath(path, spacing=spacing, thickness=thickness, flatness=flatness, iterations=iterations, ignoreColor=ignoreColor)
+            mesh = inflateLinearPath(path, spacing=spacing, inflationParams=inflationParams, ignoreColor=ignoreColor)
             data.meshes.append( ("inflated_" + baseName + "_" + str(i), mesh) )
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start]
@@ -207,11 +205,9 @@ def inflateSVGFile(svgFile, spacing=1., thickness=10., flatness=0., iterations=N
 if __name__ == '__main__':
     import cmath
     
-    flatness = 0.
-    thickness = 10.
+    params = InflationParams()
     spacing = 1.
     output = "stl"
-    iterations = None
     width = 0.5 # TODO
     twoSided = False
     trim = True
@@ -229,7 +225,8 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["tab=", "help", "stl", "flatness=", "name=", "thickness=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
+                        ["tab=", "help", "stl", "flatness=", "name=", "thickness=", 
+                        "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -242,9 +239,9 @@ if __name__ == '__main__':
                 help()
                 sys.exit(0)
             elif opt == '--flatness':
-                flatness = float(arg)
+                params.flatness = float(arg)
             elif opt == '--thickness':
-                thickness = float(arg)
+                params.thickness = float(arg)
             elif opt == '--resolution':
                 spacing = float(arg)
             elif opt == '--format' or opt == "--tab":
@@ -254,7 +251,7 @@ if __name__ == '__main__':
             elif opt == "--stl":
                 format = "stl"
             elif opt == '--iterations':
-                iterations = int(arg)
+                params.iterations = int(arg)
             elif opt == '--width':
                 width = float(arg)
             elif opt == '--xtwo-sided':
@@ -267,6 +264,8 @@ if __name__ == '__main__':
                 twoSided = True
             elif opt == "--name":
                 baseName = arg
+            elif opt == "--exponent":
+                params.exponent = float(arg)
             elif opt == "--trim":
                 trim = bool(int(arg))
             elif opt == "--output":
@@ -282,8 +281,7 @@ if __name__ == '__main__':
     if twoSided:
         thickness *= 0.5
         
-    data = inflateSVGFile(args[0], thickness=thickness, flatness=flatness, iterations=iterations, spacing=spacing, 
-        twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
+    data = inflateSVGFile(args[0], inflationParams=params, spacing=spacing, twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
