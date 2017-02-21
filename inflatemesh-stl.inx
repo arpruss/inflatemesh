@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <_name>STL Inflation Export</_name>
+  <id>mobi.omegacentauri.inflatemesh</id>
+  <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
+  <dependency type="executable" location="extensions">inflatemesh.py</dependency>
+  <output>
+    <extension>.stl</extension>
+    <mimetype>text/plain</mimetype>
+    <_filetypename>STL inflated file (*.stl)</_filetypename>
+    <_filetypetooltip>Export an STL inflation of closed paths</_filetypetooltip>
+    <dataloss>true</dataloss>
+  </output>
+  <param name="tab" type="notebook">
+    <page name="stl" _gui-text="Settings ">
+      <param name="resolution" type="float" min="0.0001" max="10.0" precision="2" _gui-text="Mesh resolution (mm):" _gui-description="Set mesh resolution (Default: 1)">1</param>
+      <param name="flatness" type="float" min="0.00" max="10.0" precision="3" _gui-text="Flatness (0-10):" _gui-description="Flatness of top for inflation (Default: 0)">0</param>
+      <param name="thickness" type="float" min="0.01" max="1000000.0" precision="3" _gui-text="Thickness (mm):" _gui-description="Thickness of inflated mesh (Default: 10)">10</param>
+      <param name="xtwo-sided" type="boolean" _gui-text="Two sided" _gui-description="Two sided inflation">0</param>
+      </param>
+    </page>
+  <script>
+      <command reldir="extensions" interpreter="python">inflatemesh.py</command>
+  </script>
+</inkscape-extension>

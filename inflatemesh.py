@@ -250,7 +250,7 @@ if __name__ == '__main__':
             elif opt == '--format' or opt == "--tab":
                 if opt == "--tab":
                     quiet = True
-                format = arg
+                format = arg.replace('"','').replace("'","")
             elif opt == "--stl":
                 format = "stl"
             elif opt == '--iterations':
@@ -280,7 +280,7 @@ if __name__ == '__main__':
         sys.exit(2)
         
     if twoSided:
-        thickness *= 2
+        thickness *= 0.5
         
     data = inflateSVGFile(args[0], thickness=thickness, flatness=flatness, iterations=iterations, spacing=spacing, 
         twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
