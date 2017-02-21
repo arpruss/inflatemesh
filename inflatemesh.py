@@ -287,7 +287,7 @@ if __name__ == '__main__':
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
-        saveSTL(outfile, mesh)
+        saveSTL(outfile, mesh, quiet=quiet)
     else:
         scad = "polygonHeight = 1;\n\n"
         

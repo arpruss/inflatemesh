@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
   <_name>STL Inflation Export</_name>
-  <id>mobi.omegacentauri.inflatemesh</id>
+  <id>mobi.omegacentauri.inflatemesh_stl</id>
   <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
   <dependency type="executable" location="extensions">inflatemesh.py</dependency>
   <output>
