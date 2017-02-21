@@ -5,6 +5,8 @@ import itertools
 import os.path
 import math
 
+SQRT2 = math.sqrt(2.)
+
 def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
     # if center is False, the mesh coordinates are guaranteed to be integers corresponding exactly
     # to the points in the data, plus a layer of neighboring points.
@@ -77,48 +79,40 @@ def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., 
 
     return mesh
 
-def inflateRaster(raster, thickness=10., flatness=1., iterations=None, 
+def inflateRaster(raster, thickness=10., flatness=0., iterations=None, 
         deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), 
-        distanceToEdge=lambda (row,col,i): 1. if i<4 else 1.414, eps=0.000001 ):
+        distanceToEdge=lambda (row,col,i): 1. if i<4 else SQRT2):
     """
     raster is a boolean matrix.
     
     flatness varies from 0 for a very gradual profile to something around 2-10 for a very flat top.
     
-    Here's a way to visualize how inflateImage() works. The white or transparent areas 
-    of the image are cold, clamped at temperature 0. Above the image, there is a layer of
-    insulation, and above that there is a flat heater at a fixed positive temperature. So, 
-    the clamped areas stay at the fixed temperature, but away from the clamped areas, the image
-    heats up. How the heat profile looks depends on how effective the layer of insulation is.
-    The effectiveness of the layer of insulation is measured by the flatness parameter.
-    When this parameter is high, the unclamped areas all get to close to the heater
-    temperature, resulting in a very sharp heat gradient near the image boundaries, and flatness
-    further away from the boundaries. When the parameter is close to 0, the insulation is more
-    effective, and the temperature rise away from the boundaries is more gradual. The result is
-    a smoother change in the gradient.
+    Here's a rough way to visualize how inflateRaster() works. A random walk starts inside the region
+    defined by the raster. If flatness is zero, it moves around randomly, and the amount of time to
+    exit the region will then yield the inflation height. If flatness is non-zero, in each time
+    step it also has a chance of death proportional to the flatness, and the inflation height is the
+    time until exit or death, whichever comes sooner. So if the flatness parameter is big, then well 
+    within the region, the process will tend to exit via death, and so points well within the region
+    will get similar height. 
     
-    Finally, the temperatures are scaled to be between 0 and thickness to generate the inflated
-    height map. 
+    The flatness parameter is scaled to be approximately invariant across spatial resolution changes,
+    and some weighting of the process is used to reduce edge effects via the use of the distanceToEdge 
+    function which measures how far a raster point is from the edge in a given direction in the case of
+    a region not aligned perfectly with the raster.
     """
     
     deltaLengths = tuple(delta.norm() for delta in deltas)
     
     width = len(raster)
     height = len(raster[0])
-        
-    alpha = 500 * len(deltaLengths) * flatness /  max(width,height)**2
+
+    k = len(deltas)
+    alpha = 500 * flatness /  max(width,height)**2
     
     if not iterations:
         iterations = 25 * max(width,height) # 60 ?
         
     data = [ [0. for y in range(height)] for x in range(width) ]
-    
-    def weight(x,y,i):
-        d = distanceToEdge(x,y,i)
-        if d < deltaLengths[i]:
-            return 1. / d
-        else:
-            return 1. / deltaLengths[i]
     
     for iter in range(iterations):
         newData = [ [0. for y in range(height)] for x in range(width) ]
@@ -134,17 +128,15 @@ def inflateRaster(raster, thickness=10., flatness=1., iterations=None,
                         
                 if raster[x][y]:
                     s = 0
-                    w = alpha
+                    w = 0
                     
-                    for i in range(len(deltas)):
-                        d = distanceToEdge(x,y,i)
-                        if d >= (1-eps) * deltaLengths[i]:
-                            s += z(deltas[i].x, deltas[i].y) / deltaLengths[i]
-                            w += 1. / deltaLengths[i]
-                        else:
-                            w += 1. / max(d, eps)
+                    for i in range(k):
+                        d = min(distanceToEdge(x,y,i) / deltaLengths[i], 1.)
+                        weight = 1./ d
+                        w += weight
+                        s += (d + (1-alpha) * z(deltas[i].x, deltas[i].y)) * weight
                             
-                    newData[x][y] = (alpha / w if alpha > 0.0 else 1.0) + s / w
+                    newData[x][y] = s / w
 
         data = newData
         
