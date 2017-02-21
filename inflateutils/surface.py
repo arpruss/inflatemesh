@@ -155,6 +155,8 @@ def inflateRaster(raster, inflationParams=InflationParams(),
     data = [[point**invExponent for point in col] for col in data]
     maxZ = max(max(col) for col in data)
     
+    #sys.stderr.write("%d %f\n" % (iterations,maxZ))
+    
     return [ [datum / maxZ * inflationParams.thickness for datum in col] for col in data ]
 
 
