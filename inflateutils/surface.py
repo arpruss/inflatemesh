@@ -6,86 +6,158 @@ import os.path
 import math
 
 class InflationParams(object):
-    def __init__(self, thickness=10., flatness=0., exponent=2., iterations=None):
+    def __init__(self, thickness=10., flatness=0., exponent=2., iterations=None, hex=True):
         self.thickness = thickness
         self.flatness = flatness
         self.exponent = exponent
         self.iterations = iterations
-
-def surfaceToMesh(data, center=False, twoSided=False, zClip=None, tolerance=0., color=None):
-    # if center is False, the mesh coordinates are guaranteed to be integers corresponding exactly
-    # to the points in the data, plus a layer of neighboring points.
-    width = len(data)
-    height = len(data[0])
-    xMin = width - 1
-    xMax = 0
-    yMin = height - 1
-    yMax = 0
+        self.hex = hex
         
-    def getValue(*args):
-        if len(args) == 1:
-            x,y = args[0]
+class MeshData(object):
+    def __init__(self, cols, rows):
+        self.cols = cols
+        self.rows = rows
+        self.data = [[0 for row in range(rows)] for col in range(cols)]
+        self.mask = [[False for row in range(rows)] for col in range(cols)]
+        
+    def clearData(self):
+        for x in range(self.cols):
+            for y in range(self.rows):
+                self.data[x][y] = 0.
+        
+    def inside(self, col, row):
+        return 0 <= col < self.cols and 0 <= row < self.rows and self.mask[col][row]
+        
+    def getData(self, col, row):
+        if 0 <= col < self.cols and 0 <= row < self.rows:
+            return self.data[col][row]
         else:
-            x,y = args
-            
-        if x < 0 or x >= width or y < 0 or y >= height:
             return 0.
+
+    def getNeighborData(self, col, row, i):
+        x,y = self.getNeighbor(col, row, i)
+        if 0 <= x < self.cols and 0 <= y < self.rows:
+            return self.data[x][y]
         else:
-            if data[x][y] <= tolerance:
-                return 0.
-            elif zClip is None:
-                return data[x][y]
-            else:
-                return min(data[x][y],zClip)
-
-    for x in range(width):
-        for y in range(height):
-            if getValue(x,y) > 0.: 
-                xMin = min(xMin, x)
-                xMax = max(xMax, x)
-                yMin = min(yMin, y)
-                yMax = max(yMax, y)
-    
-    if center:
-        offset = Vector( -0.5 * (xMin + xMax), -0.5 * (yMin + yMax) )
-    else:
-        offset = Vector( 0, 0 )
+            return 0.
         
-    mesh = []
-    
-    # this code could be made way more efficient
-    
-    for x in range(xMin - 1, xMax + 1):
-        for y in range(yMin - 1, yMax + 1):
-            v = Vector(x,y)
-            numPoints = sum(1 for delta in ((0,0), (1,0), (0,1), (1,1)) if getValue(v+delta) > 0.)
+class RectMeshData(MeshData):
+    def __init__(self, width, height, lowerLeft, spacing):
+        MeshData.__init__(self, 1+int(width / spacing), 1+int(height / spacing))
+        self.lowerLeft = lowerLeft
+        self.spacing = spacing
+        self.numNeighbors = 4
+        self.deltas = [Vector(-1,0),Vector(1,0),Vector(0,-1),Vector(0,1)]
+        self.normalizedDeltas = self.deltas
+        
+    def getNeighbor(self, col, row,i):
+        return (col,row)+self.deltas[i]
 
-            def triangles(d1, d2, d3):
-                v1,v2,v3 = v+d1,v+d2,v+d3
-                z1,z2,z3 = map(getValue, (v1,v2,v3))
-                if (z1,z2,z3) == (0.,0.,0.):
-                    return []
-                v1 += offset
-                v2 += offset
-                v3 += offset
-                output = [(color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3)))]
-                if not twoSided:
-                    z1,z2,z3 = 0.,0.,0.
-                output.append ( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
-                return output
+    def getCoordinates(self, col,row):
+        return self.spacing*Vector(col,row) + self.lowerLeft
+        
+    def insideCoordinates(self, v):
+        v = (v-self.lowerLeft)* (1./self.spacing)
+        return self.inside(int(math.floor(0.5+v.x)), int(math.floor(0.5+v.y)))
+        
+    def getDeltaLength(self, col, row, i):
+        return self.spacing
+        
+    def getMesh(self, twoSided=False, color=None):
+        mesh = []
+        
+        def getValue(z):
+            return self.getData(z[0],z[1])
+        
+        for x in range(-1,self.cols):
+            for y in range(-1,self.rows):
+                v = Vector(x,y)
+                numPoints = sum(1 for delta in ((0,0), (1,0), (0,1), (1,1)) if self.getData(v.x+delta[0],v.y+delta[1]) > 0.)
+
+                def triangles(d1, d2, d3):
+                    v1,v2,v3 = v+d1,v+d2,v+d3
+                    z1,z2,z3 = map(getValue, (v1,v2,v3))
+                    if (z1,z2,z3) == (0.,0.,0.):
+                        return []
+                    v1 = self.getCoordinates(v1.x,v1.y)
+                    v2 = self.getCoordinates(v2.x,v2.y)
+                    v3 = self.getCoordinates(v3.x,v3.y)
+                    output = [(color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3)))]
+                    if not twoSided:
+                        z1,z2,z3 = 0.,0.,0.
+                    output.append ( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
+                    return output
+                
+                if numPoints > 0:
+                    if getValue(v+(0,0)) == 0. and getValue(v+(1,1)) == 0.:
+                        mesh += triangles((0,0), (1,0), (1,1))
+                        mesh += triangles((1,1), (0,1), (0,0))
+                    else:
+                        mesh += triangles((0,0), (1,0), (0,1))
+                        mesh += triangles((1,0), (1,1), (0,1))
+                        
+        return mesh
+        
+    
+class HexMeshData(MeshData):
+    def __init__(self, width, height, lowerLeft, spacing):
+        self.hSpacing = spacing
+        self.vSpacing = spacing * math.sqrt(3) / 2.
+        self.lowerLeft = lowerLeft + Vector(-self.hSpacing*0.25, self.vSpacing*0.5)
+#        height += 10
+#        width += 10
+        MeshData.__init__(self, 2+int(width / self.hSpacing), 2+int(height / self.vSpacing))
+        self.numNeighbors = 6
+
+        self.oddDeltas = [Vector(1,0), Vector(1,1), Vector(0,1), Vector(-1,0), Vector(0,-1), Vector(1,-1)]
+        self.evenDeltas = [Vector(1,0), Vector(0,1), Vector(-1,1), Vector(-1,0), Vector(-1,-1), Vector(0,-1)]
+        
+        a = math.sqrt(3) / 2.
+        self.normalizedDeltas = [Vector(1.,0.), Vector(0.5,a), Vector(-0.5,a), Vector(-1.,0.), Vector(-0.5,-a), Vector(0.5,-a)]
+        
+    def getNeighbor(self, col,row,i):
+        if row % 2:
+            return Vector(col,row)+self.oddDeltas[i]
+        else:
+            return Vector(col,row)+self.evenDeltas[i]
             
-            if numPoints > 0:
-                if getValue(v+(0,0)) == 0. and getValue(v+(1,1)) == 0.:
-                    mesh += triangles((0,0), (1,0), (1,1))
-                    mesh += triangles((1,1), (0,1), (0,0))
-                else:
-                    mesh += triangles((0,0), (1,0), (0,1))
-                    mesh += triangles((1,0), (1,1), (0,1))
+    def getCoordinates(self, col,row):
+        return Vector( self.hSpacing * (col + 0.5*(row%2)), self.vSpacing * row ) + self.lowerLeft
+        
+    def insideCoordinates(self, v):
+        row = int(math.floor(0.5+(v.y-self.lowerLeft.y) / self.vSpacing))
+        col = int(math.floor(0.5+(v.x-self.lowerLeft.x-0.5*(row%2)) / self.hSpacing))
+        return self.inside(col, row)
+        
+    def getDeltaLength(self, col, row, i):
+        return self.hSpacing
 
-    return mesh
+    def getMesh(self, twoSided=False, color=None):
+        mesh = []
+        
+        def getValue(z):
+            return self.getData(z[0],z[1])
+            
+        done = set()
+        
+        for x in range(self.cols):
+            for y in range(self.rows):
+                if self.inside(x,y):
+                    neighbors = [self.getNeighbor(x,y,i) for i in range(self.numNeighbors)]
+                    for i in range(self.numNeighbors):
+                        triangle = ((x,y), tuple(neighbors[i-1]), tuple(neighbors[i]))
+                        sortedTriangle = tuple(sorted(triangle))
+                        if sortedTriangle not in done:
+                            done.add(sortedTriangle)
+                            v1,v2,v3 = (self.getCoordinates(p[0],p[1]) for p in triangle)
+                            z1,z2,z3 = (self.getData(p[0],p[1]) for p in triangle)
+                            mesh.append( (color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3))) )
+                            if not twoSided:
+                                z1,z2,z3 = 0.,0.,0.
+                            mesh.append( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
+        return mesh
 
-def inflateRaster(raster, inflationParams=InflationParams(), 
-        deltas=(Vector(-1,0),Vector(1,0),Vector(0,1),Vector(0,-1),Vector(-1,-1),Vector(1,1),Vector(-1,1),Vector(1,-1)), distanceToEdge=None):
+def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=None):
     """
     raster is a boolean matrix.
     
@@ -107,14 +179,14 @@ def inflateRaster(raster, inflationParams=InflationParams(),
     a region not aligned perfectly with the raster.
     """
     
-    deltaLengths = tuple(delta.norm() for delta in deltas)
     if distanceToEdge == None:
-        distanceToEdge = lambda (x,y,i) : deltaLengths[i]
+        distanceToEdge = lambda (x,y,i) : meshData.deltaLengths[i]
     
-    width = len(raster)
-    height = len(raster[0])
-
-    k = len(deltas)
+    width = meshData.cols
+    height = meshData.rows
+    raster = meshData.data
+    
+    k = meshData.numNeighbors
     alpha = 500 * inflationParams.flatness /  max(width,height)**2
     exponent = inflationParams.exponent
     invExponent = 1. / exponent
@@ -124,87 +196,27 @@ def inflateRaster(raster, inflationParams=InflationParams(),
     else:
         iterations = inflationParams.iterations
         
-    data = [ [0. for y in range(height)] for x in range(width) ]
-    
+    meshData.clearData()
+
     for iter in range(iterations):
         newData = [ [0. for y in range(height)] for x in range(width) ]
         for x in range(width):
             for y in range(height):
-                def z(dx,dy):
-                    x1 = x+dx
-                    y1 = y+dy
-                    if x1 < 0 or x1 >= width or y1 < 0 or y1 >= height:
-                        return 0.
-                    else:
-                        return data[x1][y1]
-                        
-                if raster[x][y]:
+                if meshData.mask[x][y]:
                     s = 0
                     w = 0
                     
                     for i in range(k):
-                        d = min(distanceToEdge(x,y,i) / deltaLengths[i], 1.)
+                        d = min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)
                         weight = 1./ d
                         w += weight
-                        s += (z(deltas[i].x, deltas[i].y)**invExponent+d)**exponent * weight
-                            
+                        s += (meshData.getNeighborData(x,y,i)**invExponent+d)**exponent * weight
+                    
                     newData[x][y] = (1-alpha) * s / w
 
-        data = newData
+        meshData.data = newData
         
-    data = [[point**invExponent for point in col] for col in data]
+    data = [[point**invExponent for point in col] for col in meshData.data]
     maxZ = max(max(col) for col in data)
     
-    #sys.stderr.write("%d %f\n" % (iterations,maxZ))
-    
-    return [ [datum / maxZ * inflationParams.thickness for datum in col] for col in data ]
-
-
-if __name__ == '__main__':
-    from PIL import Image
-
-    inPath = sys.argv[1]
-    outPath = os.path.splitext(inPath)[0] + ".scad"
-    baseName = os.path.splitext(os.path.basename(outPath))[0]
-    
-    thickness = 10.
-    flatness = 0.
-    iterations = None
-    if len(sys.argv)>2:
-        thickness = float(sys.argv[2])
-    if len(sys.argv)>3:
-        flatness = float(sys.argv[3])
-    if len(sys.argv)>4:
-        iterations = int(sys.argv[4])
-
-    image = Image.open(inPath).convert('RGBA')
-    
-    def inside(x,y):
-        rgb = image.getpixel((x,image.size[1]-1-y))
-        if len(rgb) > 3 and rgb[3] == 0:
-            return False
-        return rgb[0:3] != (255,255,255)
-
-    raster = [ [ inside(x,y) for y in range(image.size[1]) ] for x in range(image.size[0]) ]
-    
-    print("Inflating...")
-    data = inflateRaster(raster,thickness=thickness,flatness=flatness,iterations=iterations)
-    
-    scadModule = toSCADModule(surfaceToMesh(data, twoSided=False, center=True), baseName+"_raw")
-    scadModule += """
-
-module %s() {
-     render(convexity=2)
-     translate([0,0,-%f])
-     intersection() {
-        %s_raw();
-        translate([-%d/2,-%d/2,%f]) cube([%d,%d,%f]);
-     }
-}
-
-%s();
-""" % (baseName, thickness / 20., baseName, image.size[0], image.size[1], thickness / 20., image.size[0]+2, image.size[1]+2, thickness+1., baseName)
-    
-    print("Saving "+outPath)
-    with open(outPath, "w") as f: f.write(scadModule)
-    
+    meshData.data = [ [datum / maxZ * inflationParams.thickness for datum in col] for col in data ]

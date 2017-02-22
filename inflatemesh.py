@@ -8,42 +8,64 @@ from inflateutils.exportmesh import *
 
 quiet = False
 
-def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD):
+def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD, hex=False):
     """
     Returns boolean raster of strict interior as well as coordinates of lower-left corner.
     """
-    spacing = float(spacing)
-    lines = shader.Shader.shadePolygon(polygon, 0, spacing, avoidOutline=True, mode=shadeMode, alternate=False)
-    height = len(lines)
-    bottom = min(z[0].imag for z in lines)
-    left = min(z[0].real for z in lines) - 0.5 * spacing
-    right = max(z[1].real for z in lines)
-    width = int((right-left) / spacing+1)
+    bottom = min(min(l[0].imag,l[1].imag) for l in polygon)
+    left = min(min(l[0].real,l[1].real) for l in polygon)
+    top = max(max(l[0].imag,l[1].imag) for l in polygon)
+    right = max(max(l[0].real,l[1].real) for l in polygon)
 
-    raster = [[False for y in range(height)] for x in range(width)]
-
-    for line in lines:
-        y = int((line[0].imag - bottom) / spacing + 0.5)
-        x = int((line[0].real - left) / spacing)
-        while left + x * spacing < line[1].real:
-            if line[0].real < left + x * spacing:
-                raster[x][y] = True
-            x += 1
+    if hex:
+        meshData = HexMeshData(right-left,top-bottom,Vector(left,bottom),spacing)
+    else:
+        meshData = RectMeshData(right-left,top-bottom,Vector(left,bottom),spacing)
+        
+    # TODO: not really optimal but simple -- the wraparound is the inoptimality
+    phases = [-math.pi] + list(sorted( cmath.phase(l[1]-l[0]) for l in polygon if l[1] != l[0] ) ) + [math.pi]
+    bestSpacing = 0
+    bestPhase = 0.
+    for i in range(1,len(phases)):
+        if phases[i]-phases[i-1] > bestSpacing:
+            bestPhase = 0.5 * (phases[i] + phases[i-1])
+            bestSpacing = phases[i]-phases[i-1]
+            
+    rotate = cmath.exp(-1j * bestPhase)
     
-    return raster,complex(left,bottom)
+    lines = tuple((l[0] * rotate, l[1] * rotate) for l in polygon)
+    
+    for col in range(meshData.cols):
+        for row in range(meshData.rows):
+            z = meshData.getCoordinates(col,row).toComplex() * rotate
+            sum = 0
+            for l in lines:
+                a = l[0] - z
+                b = l[1] - z
+                if a.imag < 0 < b.imag or b.imag < 0 < a.imag:
+                    mInv = (b.real-a.real)/(b.imag-a.imag)
+                    if -a.imag * mInv + a.real >= 0:
+                        if shadeMode == shader.Shader.MODE_EVEN_ODD:
+                            sum += 1
+                        else:
+                            if a.imag < 0:
+                                sum += 1
+                            else:
+                                sum -= 1
+            if (shadeMode == shader.Shader.MODE_EVEN_ODD and sum % 2) or (shadeMode != shader.Shader.MODE_EVEN_ODD and sum != 0):
+                meshData.mask[col][row] = True
+                
+    return meshData
     
 def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
     
 def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
-        center=False, twoSided=False, color=None, trim=True, fastDistanceMap=False):
+        center=False, twoSided=False, color=None, trim=True):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
-    raster,bottomLeft = rasterizePolygon(polygon, spacing, shadeMode=shadeMode)
-    rasterWidth = len(raster)
-    rasterHeight = len(raster[0])
-    bottomLeftV = Vector(bottomLeft)
+    meshData = rasterizePolygon(polygon, spacing, shadeMode=shadeMode, hex=inflationParams.hex)
     
     def distanceToEdge(z0, direction):
         direction = direction / abs(direction)
@@ -76,40 +98,32 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
                 update(x)
         return state.bestLength
 
-    def inside(v):
-        if v[0] < 0 or v[0] >= rasterWidth or v[1] < 0 or v[1] >= rasterHeight:
-            return False
-        return raster[v[0]][v[1]]
-        
     message("Making edge distance map")
-    deltas = (Vector(-1,0), Vector(1,0), Vector(0,-1), Vector(0,1)) # , Vector(-1,-1), Vector(1,1), Vector(-1,1), Vector(1,-1))
+    deltas = meshData.normalizedDeltas
     deltasComplex = tuple( v.toComplex() for v in deltas )
     deltaLengths = tuple( abs(d) for d in deltasComplex )
-    map = [[[1. for i in range(len(deltas))] for row in range(rasterHeight)] for col in range(rasterWidth)]
-    for col in range(rasterWidth):
-        for row in range(rasterHeight):
-            v = spacing * Vector(col,row) + bottomLeftV
+    map = [[[1. for i in range(len(deltas))] for row in range(meshData.rows)] for col in range(meshData.cols)]
+    
+    for col in range(meshData.cols):
+        for row in range(meshData.rows):
+            v = meshData.getCoordinates(col,row)
+
             for i in range(len(deltasComplex)):
-                if not fastDistanceMap or inside(deltas[i]+(col,row)):
-                    map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] ) / spacing
-                else:
-                    map[col][row][i] = deltaLengths[i] / spacing
+                map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] )
             
     message("Inflating")
     
     def distanceFunction(col, row, i, map=map):
         return map[col][row][i]
     
-    surface = inflateRaster(raster, inflationParams=inflationParams, deltas=deltas, distanceToEdge=distanceFunction)
+    inflateRaster(meshData, inflationParams=inflationParams, distanceToEdge=distanceFunction)
     message("Meshing")
-    mesh0 = surfaceToMesh(surface, center=False, twoSided=twoSided, color=color)
+   
+    mesh0 = meshData.getMesh(twoSided=twoSided, color=color)
     
     def fixFace(face, polygon, trim=True):
-        def scaleFace(face):
-            return tuple(Vector(v.x*spacing+bottomLeftV.x, v.y*spacing+bottomLeftV.y, v.z) for v in face)
-
         if not trim:
-            return [scaleFace(face)]
+            return [face]
 
         # TODO: optimize by using cached data from the distance map
         def trimLine(start, stop):
@@ -122,27 +136,27 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
             if distance < length:
                 z = z0 + distance * delta / length
                 return Vector(z.real, z.imag, 0)
+            else:
+                return stop
     
-        outsideCount = sum(1 for v in face if not inside(v))
+        outsideCount = sum(1 for v in face if not meshData.insideCoordinates(v))
         if outsideCount == 3:
             return []
         elif outsideCount == 0:
-            return [scaleFace(face)]
+            return [face]
         elif outsideCount == 2:
-            if inside(face[1]):
+            if meshData.insideCoordinates(face[1]):
                 face = (face[1], face[2], face[0])
-            elif inside(face[2]):
+            elif meshData.insideCoordinates(face[2]):
                 face = (face[2], face[0], face[1])
             # now, the first vertex is inside and the others are outside
-            face = scaleFace(face)
             return [ (face[0], trimLine(face[0], face[1]), trimLine(face[0], face[2])) ]
         else: # outsideCount == 1
-            if not inside(face[0]):
+            if not meshData.insideCoordinates(face[0]):
                 face = (face[1], face[2], face[0])
-            elif not inside(face[1]):
+            elif not meshData.insideCoordinates(face[1]):
                 face = (face[2], face[0], face[1])
             # now, the first two vertices are inside, and the third is outside
-            face = scaleFace(face)
             closest0 = trimLine(face[0], face[2])
             closest1 = trimLine(face[1], face[2])
             if closest0 != closest1:
@@ -155,6 +169,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
     for rgb,face in mesh0:
         for face2 in fixFace(face, polygon, trim=trim):
             mesh.append((rgb, face2))
+            
     return mesh
     
 def sortedApproximatePaths(paths,error=0.1):
@@ -225,7 +240,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["tab=", "help", "stl", "flatness=", "name=", "thickness=", 
+                        ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "thickness=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", "output=", "trim=", "no-inflate", "xinflate="])
         # TODO: support width for ribbon-thin stuff
 
@@ -244,6 +259,10 @@ if __name__ == '__main__':
                 params.thickness = float(arg)
             elif opt == '--resolution':
                 spacing = float(arg)
+            elif opt == '--rectangular':
+                params.hex = False
+            elif opt == '--mesh':
+                params.hex = arg.lower()[0] == 'h'
             elif opt == '--format' or opt == "--tab":
                 if opt == "--tab":
                     quiet = True
@@ -279,7 +298,7 @@ if __name__ == '__main__':
         sys.exit(2)
         
     if twoSided:
-        thickness *= 0.5
+        params.thickness *= 0.5
         
     data = inflateSVGFile(args[0], inflationParams=params, spacing=spacing, twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
     
@@ -287,7 +306,8 @@ if __name__ == '__main__':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
         saveSTL(outfile, mesh, quiet=quiet)
     else:
-        scad = "polygonHeight = 1;\n\n"
+        if data.uninflatedPointLists:
+            scad = "polygonHeight = 1;\n\n"
         
         for name,points in data.pointLists:
             scad += name + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
