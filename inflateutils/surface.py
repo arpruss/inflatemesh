@@ -126,8 +126,13 @@ class HexMeshData(MeshData):
         
     def insideCoordinates(self, v):
         row = int(math.floor(0.5+(v.y-self.lowerLeft.y) / self.vSpacing))
-        col = int(math.floor(0.5+(v.x-self.lowerLeft.x-0.5*(row%2)) / self.hSpacing))
+        col = int(math.floor(0.5+(v.x-self.lowerLeft.x) / self.hSpacing -0.5*(row%2)) )
         return self.inside(col, row)
+        
+    def getColRow(self, v):
+        row = int(math.floor(0.5+(v.y-self.lowerLeft.y) / self.vSpacing))
+        col = int(math.floor(0.5+(v.x-self.lowerLeft.x) / self.hSpacing -0.5*(row%2)) )
+        return (col, row)
         
     def getDeltaLength(self, col, row, i):
         return self.hSpacing

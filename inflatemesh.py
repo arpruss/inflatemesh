@@ -23,7 +23,8 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD, he
         meshData = RectMeshData(right-left,top-bottom,Vector(left,bottom),spacing)
         
     # TODO: not really optimal but simple -- the wraparound is the inoptimality
-    phases = [-math.pi] + list(sorted( cmath.phase(l[1]-l[0]) for l in polygon if l[1] != l[0] ) ) + [math.pi]
+    
+    phases = [0] + list(sorted( cmath.phase(l[1]-l[0]) % math.pi for l in polygon if l[1] != l[0] ) ) + [math.pi]
     bestSpacing = 0
     bestPhase = 0.
     for i in range(1,len(phases)):
@@ -42,19 +43,19 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD, he
             for l in lines:
                 a = l[0] - z
                 b = l[1] - z
-                if a.imag < 0 < b.imag or b.imag < 0 < a.imag:
+                if a.imag <= 0 <= b.imag or b.imag <= 0 <= a.imag:
                     mInv = (b.real-a.real)/(b.imag-a.imag)
                     if -a.imag * mInv + a.real >= 0:
                         if shadeMode == shader.Shader.MODE_EVEN_ODD:
                             sum += 1
                         else:
-                            if a.imag < 0:
+                            if a.imag < b.imag:
                                 sum += 1
                             else:
                                 sum -= 1
             if (shadeMode == shader.Shader.MODE_EVEN_ODD and sum % 2) or (shadeMode != shader.Shader.MODE_EVEN_ODD and sum != 0):
                 meshData.mask[col][row] = True
-                
+
     return meshData
     
 def message(string):
@@ -85,8 +86,8 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
             l0 = rotate * (line[0]-z0)
             l1 = rotate * (line[1]-z0)
             if l0.imag == l1.imag and l0.imag == 0.:
-                if l0.real <= 0 and l1.real >= 0:
-                    return start
+                if (l0.real <= 0 and l1.real >= 0) or (l1.real <= 0 and l0.real >= 0):
+                    return 0.
                 update(l0.real)
                 update(l1.real)
             elif l0.imag <= 0 <= l1.imag or l1.imag <= 0 <= l0.imag:
@@ -101,7 +102,6 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
     message("Making edge distance map")
     deltas = meshData.normalizedDeltas
     deltasComplex = tuple( v.toComplex() for v in deltas )
-    deltaLengths = tuple( abs(d) for d in deltasComplex )
     map = [[[1. for i in range(len(deltas))] for row in range(meshData.rows)] for col in range(meshData.cols)]
     
     for col in range(meshData.cols):
@@ -141,6 +141,7 @@ def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, i
     
         outsideCount = sum(1 for v in face if not meshData.insideCoordinates(v))
         if outsideCount == 3:
+            # should not ever happen
             return []
         elif outsideCount == 0:
             return [face]
@@ -308,6 +309,8 @@ if __name__ == '__main__':
     else:
         if data.uninflatedPointLists:
             scad = "polygonHeight = 1;\n\n"
+        else:
+            scad = ""
         
         for name,points in data.pointLists:
             scad += name + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
