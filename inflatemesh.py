@@ -8,7 +8,7 @@ from inflateutils.exportmesh import *
 
 quiet = False
 
-def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD, hex=False):
+def rasterizePolygon(polygon, gridSize, shadeMode=shader.Shader.MODE_EVEN_ODD, hex=False):
     """
     Returns boolean raster of strict interior as well as coordinates of lower-left corner.
     """
@@ -16,6 +16,11 @@ def rasterizePolygon(polygon, spacing, shadeMode=shader.Shader.MODE_EVEN_ODD, he
     left = min(min(l[0].real,l[1].real) for l in polygon)
     top = max(max(l[0].imag,l[1].imag) for l in polygon)
     right = max(max(l[0].real,l[1].real) for l in polygon)
+    
+    width = right-left
+    height = top-bottom
+    
+    spacing = max(width,height) / gridSize
 
     if hex:
         meshData = HexMeshData(right-left,top-bottom,Vector(left,bottom),spacing)
@@ -62,11 +67,11 @@ def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
     
-def inflatePolygon(polygon, spacing=1., shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
+def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
         center=False, twoSided=False, color=None, trim=True):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
-    meshData = rasterizePolygon(polygon, spacing, shadeMode=shadeMode, hex=inflationParams.hex)
+    meshData = rasterizePolygon(polygon, gridSize, shadeMode=shadeMode, hex=inflationParams.hex)
     
     def distanceToEdge(z0, direction):
         direction = direction / abs(direction)
@@ -183,28 +188,29 @@ def sortedApproximatePaths(paths,error=0.1):
         
     return sorted(paths, key=key)
 
-def inflateLinearPath(path, spacing=1., inflationParams=None, ignoreColor=False):
+def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False):
     lines = []
     for line in path:
         lines.append((line.start,line.end))
     mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
-    return inflatePolygon(lines, spacing=spacing, inflationParams=inflationParams, twoSided=twoSided, color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
+    return inflatePolygon(lines, gridSize=gridSize, inflationParams=inflationParams, twoSided=twoSided, 
+                color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
 
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, spacing=1., inflationParams=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
+def inflateSVGFile(svgFile, gridSize=30, inflationParams=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
     data = InflatedData()
     data.meshes = []
     data.pointLists = []
     data.uninflatedPointLists = []
 
-    paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=spacing*0.1 )
+    paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=0.1 )
     
     for i,path in enumerate(paths):
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
-            mesh = inflateLinearPath(path, spacing=spacing, inflationParams=inflationParams, ignoreColor=ignoreColor)
+            mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=ignoreColor)
             data.meshes.append( ("inflated_" + baseName + "_" + str(i), mesh) )
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start]
@@ -222,13 +228,13 @@ if __name__ == '__main__':
     import cmath
     
     params = InflationParams()
-    spacing = 1.
     output = "stl"
     width = 0.5 # TODO
     twoSided = False
     trim = True
     outfile = None
     inflate = True
+    gridSize = 30
     baseName = "path"
     
     def help(exitCode=0):
@@ -259,7 +265,7 @@ if __name__ == '__main__':
             elif opt == '--thickness':
                 params.thickness = float(arg)
             elif opt == '--resolution':
-                spacing = float(arg)
+                gridSize = int(arg)
             elif opt == '--rectangular':
                 params.hex = False
             elif opt == '--mesh':
@@ -301,7 +307,7 @@ if __name__ == '__main__':
     if twoSided:
         params.thickness *= 0.5
         
-    data = inflateSVGFile(args[0], inflationParams=params, spacing=spacing, twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
+    data = inflateSVGFile(args[0], inflationParams=params, gridSize=gridSize, twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
