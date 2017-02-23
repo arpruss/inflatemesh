@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<inkscape-extension xmlns="http://www.inkscape.org/namespace/inkscape/extension">
+  <_name>OpenSCAD Path Export</_name>
+  <id>mobi.omegacentauri.svg2scad</id>
+  <dependency type="extension">org.inkscape.output.svg.inkscape</dependency>
+  <dependency type="executable" location="extensions">svg2scad.py</dependency>
+  <output>
+    <extension>.scad</extension>
+    <mimetype>text/plain</mimetype>
+    <_filetypename>OpenSCAD path extraction (*.scad)</_filetypename>
+    <_filetypetooltip>Export paths to OpenSCAD points</_filetypetooltip>
+    <dataloss>true</dataloss>
+  </output>
+  <param name="tab" type="notebook">
+    <page name="scad" _gui-text="Settings ">
+      <param name="tolerance" type="float" min="0.001" max="10.0" precision="3" _gui-text="Tolerance (0.001-10mm):" _gui-description="Precision when flatting Beziers (Default: 0.1)">0.1</param>
+      <param name="height" type="float" min="0" max="1000000.0" precision="3" _gui-text="Height (mm):" _gui-description="Height of ribbons or polygons (Default: 10); use 0 for 2D">10</param>
+      <param name="width" type="float" min="0.001" max="1000000.0" precision="3" _gui-text="Width (mm):" _gui-description="Width of ribbons (Default: 1)">1</param>
+      <param name="mode" type="enum" _gui-text="Extraction mode:" _gui-description="Choose what to put in the SCAD file.">
+        <item value="points">point lists only</item>
+        <item value="ribbons">ribbons and point lists</item>
+        <item value="polygons">polygons and point lists</item>
+      </param>
+      <param name="name" type="string" _gui-text="OpenSCAD object identifier" _gui-description="All the variables will be tagged with what you put here.">svg</param>
+    </page>
+  </param>
+  <script>
+      <command reldir="extensions" interpreter="python">svg2scad.py</command>
+  </script>
+</inkscape-extension>

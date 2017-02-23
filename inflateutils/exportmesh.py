@@ -23,7 +23,7 @@ def toMesh(polys):
                 output.append((rgb,face))
         return output
 
-def toSCADModule(polys, moduleName):
+def toSCADModule(polys, moduleName, coordinateFormat="%.9f"):
     """
     INPUT:
     polys: list of (color,polyhedra) pairs (counterclockwise triangles), or a list of (color,triangle) pairs (TODO: currently uses first color for all in latter case)
@@ -49,7 +49,7 @@ def toSCADModule(polys, moduleName):
             for v in reversed(face):
                 if tuple(v) not in pointsDict:
                     pointsDict[tuple(v)] = i
-                    points.append( "[%.9f,%.9f,%.9f]" % tuple(v) )
+                    points.append( ("[" + coordinateFormat + "," + coordinateFormat + "," + coordinateFormat + "]") % tuple(v) )
                     i += 1
         line += ",".join(points)
         line += "], faces=["
