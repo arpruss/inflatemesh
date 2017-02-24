@@ -4,7 +4,7 @@ from exportmesh import *
 import itertools
 import os.path
 import math
-from multiprocessing import Process
+from multiprocessing import Process, Array
 
 class InflationParams(object):
     def __init__(self, thickness=10., flatness=0., exponent=2., iterations=None, hex=True):
@@ -18,8 +18,8 @@ class MeshData(object):
     def __init__(self, cols, rows):
         self.cols = cols
         self.rows = rows
-        self.data = [[0 for row in range(rows)] for col in range(cols)]
-        self.mask = [[False for row in range(rows)] for col in range(cols)]
+        self.data = tuple([0 for row in range(rows)] for col in range(cols))
+        self.mask = tuple([False for row in range(rows)] for col in range(cols))
         
     def clearData(self):
         for x in range(self.cols):
@@ -48,7 +48,7 @@ class RectMeshData(MeshData):
         self.lowerLeft = lowerLeft
         self.spacing = spacing
         self.numNeighbors = 4
-        self.deltas = [Vector(-1,0),Vector(1,0),Vector(0,-1),Vector(0,1)]
+        self.deltas = (Vector(-1,0),Vector(1,0),Vector(0,-1),Vector(0,1))
         self.normalizedDeltas = self.deltas
         
     def getNeighbor(self, col, row,i):
@@ -110,11 +110,11 @@ class HexMeshData(MeshData):
         MeshData.__init__(self, 2+int(width / self.hSpacing), 2+int(height / self.vSpacing))
         self.numNeighbors = 6
 
-        self.oddDeltas = [Vector(1,0), Vector(1,1), Vector(0,1), Vector(-1,0), Vector(0,-1), Vector(1,-1)]
-        self.evenDeltas = [Vector(1,0), Vector(0,1), Vector(-1,1), Vector(-1,0), Vector(-1,-1), Vector(0,-1)]
+        self.oddDeltas = (Vector(1,0), Vector(1,1), Vector(0,1), Vector(-1,0), Vector(0,-1), Vector(1,-1))
+        self.evenDeltas = (Vector(1,0), Vector(0,1), Vector(-1,1), Vector(-1,0), Vector(-1,-1), Vector(0,-1))
         
         a = math.sqrt(3) / 2.
-        self.normalizedDeltas = [Vector(1.,0.), Vector(0.5,a), Vector(-0.5,a), Vector(-1.,0.), Vector(-0.5,-a), Vector(0.5,-a)]
+        self.normalizedDeltas = (Vector(1.,0.), Vector(0.5,a), Vector(-0.5,a), Vector(-1.,0.), Vector(-0.5,-a), Vector(0.5,-a))
         
     def getNeighbor(self, col,row,i):
         if row % 2:
@@ -163,23 +163,7 @@ class HexMeshData(MeshData):
                             mesh.append( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
         return mesh
 
-def updateData(newData, meshData, k, distanceToEdge, alpha, exponent, invExponent, worker, numWorkers):
-    for x in range(meshData.cols):
-        if x % numWorkers == worker:
-            for y in range(meshData.rows):
-                if meshData.mask[x][y]:
-                    s = 0
-                    w = 0
-                    
-                    for i in range(k):
-                        d = min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)
-                        weight = 1./ d
-                        w += weight
-                        s += (meshData.getNeighborData(x,y,i)**invExponent+d)**exponent * weight
-                    
-                    newData[x][y] = (1-alpha) * s / w
-
-def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=None, numCores=1): # TODO: numCores>1 doesn't work yet
+def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=None):
     """
     raster is a boolean matrix.
     
@@ -209,7 +193,7 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
     raster = meshData.data
     
     k = meshData.numNeighbors
-    alpha = 500 * inflationParams.flatness /  max(width,height)**2
+    alpha = 1 - 500 * inflationParams.flatness /  max(width,height)**2
     exponent = inflationParams.exponent
     invExponent = 1. / exponent
     
@@ -220,19 +204,28 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
         
     meshData.clearData()
     
+    adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(height))
+    
     for iter in range(iterations):
-        newData = [ [0. for y in range(height)] for x in range(width) ]
-        
-        if numCores == 1:
-            updateData(newData, meshData, k, distanceToEdge, alpha, exponent, invExponent, 0, 1) 
-        else:
-            workers = [ Process(target=updateData, args=(newData, meshData, k, distanceToEdge, alpha, exponent, invExponent, i, numCores)) for i in range(numCores) ]
-            for w in workers: w.start()
-            for w in workers: w.join()
+        newData = tuple([0 for y in range(height)] for x in range(width))
 
+        for x in range(width): 
+            for y in range(height):
+                if meshData.mask[x][y]:
+                    s = 0
+                    w = 0
+                    
+                    for i in range(k):
+                        d = adjustedDistances[x][y][i]
+                        w += 1. / d
+                        s += (meshData.getNeighborData(x,y,i)**invExponent+d)**exponent / d
+                    
+                    newData[x][y] = alpha * s / w
+                    
         meshData.data = newData
         
-    data = [[point**invExponent for point in col] for col in meshData.data]
+    data = tuple([point**invExponent for point in col] for col in meshData.data)
+
     maxZ = max(max(col) for col in data)
     
-    meshData.data = [ [datum / maxZ * inflationParams.thickness for datum in col] for col in data ]
+    meshData.data = tuple([datum / maxZ * inflationParams.thickness for datum in col] for col in data)
