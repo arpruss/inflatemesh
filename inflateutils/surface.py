@@ -22,9 +22,8 @@ class MeshData(object):
         self.mask = tuple([False for row in range(rows)] for col in range(cols))
         
     def clearData(self):
-        for x in range(self.cols):
-            for y in range(self.rows):
-                self.data[x][y] = 0.
+        for x,y in self.getPoints(useMask=False):
+            self.data[x][y] = 0.
         
     def inside(self, col, row):
         return 0 <= col < self.cols and 0 <= row < self.rows and self.mask[col][row]
