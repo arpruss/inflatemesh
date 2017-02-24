@@ -22,6 +22,7 @@
         <item value="rectangular">rectangular</item>
       </param>
       <param name="xtwo-sided" type="boolean" _gui-text="Two sided" _gui-description="Two sided inflation">0</param>
+      <param name="xcenter-page" type="boolean" _gui-text="Center page at (0,0,0)" _gui-description="This centers the center of the Inkscape page at the origin in the OpenSCAD file.">1</param>
       <param name="name" type="string" _gui-text="OpenSCAD object identifier" _gui-description="All the variables will be tagged with what you put here.">svg</param>
       </param>
     </page>

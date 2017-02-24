@@ -72,7 +72,7 @@ def message(string):
         sys.stderr.write(string + "\n")
     
 def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
-        center=False, twoSided=False, color=None, trim=True):
+        center=False, twoSided=False, color=None):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
     meshData = rasterizePolygon(polygon, gridSize, shadeMode=shadeMode, hex=inflationParams.hex)
@@ -130,10 +130,7 @@ def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, 
    
     mesh0 = meshData.getMesh(twoSided=twoSided, color=color)
     
-    def fixFace(face, polygon, trim=True):
-        if not trim:
-            return [face]
-
+    def fixFace(face, polygon):
         # TODO: optimize by using cached data from the distance map
         def trimLine(start, stop):
             delta = (stop - start).toComplex() # projects to 2D
@@ -177,7 +174,7 @@ def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, 
     message("Fixing outer faces")
     mesh = []
     for rgb,face in mesh0:
-        for face2 in fixFace(face, polygon, trim=trim):
+        for face2 in fixFace(face, polygon):
             mesh.append((rgb, face2))
             
     return mesh
@@ -192,30 +189,55 @@ def sortedApproximatePaths(paths,error=0.1):
         
     return sorted(paths, key=key)
 
-def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False):
+def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False, offset=0j):
     lines = []
     for line in path:
-        lines.append((line.start,line.end))
+        lines.append((line.start+offset,line.end+offset))
     mode = shader.Shader.MODE_NONZERO if path.svgState.fillRule == 'nonzero' else shader.Shader.MODE_EVEN_ODD
     return inflatePolygon(lines, gridSize=gridSize, inflationParams=inflationParams, twoSided=twoSided, 
-                color=None if ignoreColor else path.svgState.fill, shadeMode=mode, trim=trim) 
+                color=None if ignoreColor else path.svgState.fill, shadeMode=mode) 
 
 class InflatedData(object):
     pass
                 
-def inflateSVGFile(svgFile, gridSize=30, inflationParams=None, twoSided=False, trim=True, ignoreColor=False, inflate=True, baseName="path"):
+def inflatePaths(paths, gridSize=30, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j):
     data = InflatedData()
     data.meshes = []
 
-    paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=0.1 )
+    paths = sortedApproximatePaths( paths, error=0.1 )
     
     for i,path in enumerate(paths):
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
-            mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=ignoreColor)
-            data.meshes.append( ("inflated_" + baseName + "_" + str(i), mesh) )
+            mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=ignoreColor, offset=offset)
+            name = "inflated_" + baseName
+            if len(paths)>1:
+                name += "_" + str(i+1)
+            data.meshes.append( (name, mesh) )
 
     return data
+    
+def recenterMesh(mesh):
+    leftX = float("inf")
+    rightX = float("-inf")
+    topX = float("-inf")
+    bottomX = float("inf")
+    
+    for rgb,triangle in mesh:
+        for vertex in triangle:
+            leftX = min(leftX, vertex[0])
+            rightX = max(rightX, vertex[0])
+            bottomX = min(bottomX, vertex[1])
+            topX = max(topX, vertex[1])
+
+    newMesh = []
+    
+    center = Vector(0.5*(leftX+rightX),0.5*(bottomX+topX),0.)
+    
+    for rgb,triangle in mesh:
+        newMesh.append((rgb, tuple(v-center for v in triangle)))
+        
+    return newMesh, center.x, center.y, rightX-leftX, topX-bottomX
     
 if __name__ == '__main__':
     import cmath
@@ -223,11 +245,10 @@ if __name__ == '__main__':
     params = InflationParams()
     output = "stl"
     twoSided = False
-    trim = True
     outfile = None
-    inflate = True
     gridSize = 30
     baseName = "svg"
+    centerPage = False
     
     def help(exitCode=0):
         help = """python inflate.py [options] filename.svg"""
@@ -241,7 +262,7 @@ if __name__ == '__main__':
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "thickness=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
-                        "output=", "trim=", "no-inflate", "xinflate="])
+                        "output=", "center-page", "xcenter-page="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -275,21 +296,18 @@ if __name__ == '__main__':
                 width = float(arg)
             elif opt == '--xtwo-sided':
                 twoSided = (arg == "true" or arg == "1")
-            elif opt == '--xinflate':
-                inflate = bool(int(arg))
-            elif opt == '--no-inflate':
-                inflate = False
             elif opt == '--two-sided':
                 twoSided = True
             elif opt == "--name":
                 baseName = arg
             elif opt == "--exponent":
                 params.exponent = float(arg)
-            elif opt == "--trim":
-                trim = bool(int(arg))
             elif opt == "--output":
                 outfile = arg
-                
+            elif opt == "--center-page":
+                centerPage = True
+            elif opt == "--xcenter-page":
+                centerPage = (arg == "true" or arg == "1")
             i += 1
                 
     except getopt.GetoptError as e:
@@ -300,7 +318,14 @@ if __name__ == '__main__':
     if twoSided:
         params.thickness *= 0.5
         
-    data = inflateSVGFile(args[0], inflationParams=params, gridSize=gridSize, twoSided=twoSided, trim=trim, inflate=inflate, baseName=baseName)
+    paths, lowerLeft, upperRight = parser.getPathsFromSVGFile(args[0])
+    
+    if centerPage:
+        offset = -0.5*(lowerLeft+upperRight)
+    else:
+        offset = 0
+        
+    data = inflatePaths(paths, inflationParams=params, gridSize=gridSize, twoSided=twoSided, baseName=baseName, offset=offset)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
@@ -308,11 +333,14 @@ if __name__ == '__main__':
     else:
         scad = ""
         for name,mesh in data.meshes:
+            mesh,centerX,centerY,width,height = recenterMesh(mesh)
+            scad += name + "_center = [%.5f,%.5f];\n" % (centerX,centerY)
+            scad += name + "_size = [%.5f,%.5f];\n\n" % (width,height)
             scad += toSCADModule(mesh, moduleName=name, coordinateFormat="%.5f")
             scad += "\n"
         
         for name,_ in data.meshes:
-            scad += name + "();\n"
+            scad += "translate(%s_center) %s();\n" % (name,name)
             
         if outfile:
             with open(outfile, "w") as f: f.write(scad)
