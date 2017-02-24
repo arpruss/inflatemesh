@@ -45,25 +45,24 @@ def rasterizePolygon(polygon, gridSize, shadeMode=shader.Shader.MODE_EVEN_ODD, h
     
     lines = tuple((l[0] * rotate, l[1] * rotate) for l in polygon)
     
-    for col in range(meshData.cols):
-        for row in range(meshData.rows):
-            z = meshData.getCoordinates(col,row).toComplex() * rotate
-            sum = 0
-            for l in lines:
-                a = l[0] - z
-                b = l[1] - z
-                if a.imag <= 0 <= b.imag or b.imag <= 0 <= a.imag:
-                    mInv = (b.real-a.real)/(b.imag-a.imag)
-                    if -a.imag * mInv + a.real >= 0:
-                        if shadeMode == shader.Shader.MODE_EVEN_ODD:
+    for x,y in meshData.getPoints(useMask=False):
+        z = meshData.getCoordinates(x,y).toComplex() * rotate
+        sum = 0
+        for l in lines:
+            a = l[0] - z
+            b = l[1] - z
+            if a.imag <= 0 <= b.imag or b.imag <= 0 <= a.imag:
+                mInv = (b.real-a.real)/(b.imag-a.imag)
+                if -a.imag * mInv + a.real >= 0:
+                    if shadeMode == shader.Shader.MODE_EVEN_ODD:
+                        sum += 1
+                    else:
+                        if a.imag < b.imag:
                             sum += 1
                         else:
-                            if a.imag < b.imag:
-                                sum += 1
-                            else:
-                                sum -= 1
-            if (shadeMode == shader.Shader.MODE_EVEN_ODD and sum % 2) or (shadeMode != shader.Shader.MODE_EVEN_ODD and sum != 0):
-                meshData.mask[col][row] = True
+                            sum -= 1
+        if (shadeMode == shader.Shader.MODE_EVEN_ODD and sum % 2) or (shadeMode != shader.Shader.MODE_EVEN_ODD and sum != 0):
+            meshData.mask[x][y] = True
 
     return meshData
     
@@ -112,12 +111,11 @@ def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, 
     deltasComplex = tuple( v.toComplex() for v in meshData.normalizedDeltas )
     map = tuple(tuple([1. for i in range(len(deltasComplex))] for row in range(meshData.rows)) for col in range(meshData.cols))
     
-    for col in range(meshData.cols):
-        for row in range(meshData.rows):
-            v = meshData.getCoordinates(col,row)
+    for x,y in meshData.getPoints():
+        v = meshData.getCoordinates(x,y)
 
-            for i in range(len(deltasComplex)):
-                map[col][row][i] = distanceToEdge( v.toComplex(), deltasComplex[i] )
+        for i in range(len(deltasComplex)):
+            map[x][y][i] = distanceToEdge( v.toComplex(), deltasComplex[i] )
             
     message("Inflating")
     

@@ -41,6 +41,12 @@ class MeshData(object):
             return self.data[x][y]
         else:
             return 0.
+            
+    def getPoints(self, useMask=True):
+        for i in range(self.cols):
+            for j in range(self.rows):
+                if not useMask or self.mask[i][j]:
+                    yield (i,j)
         
 class RectMeshData(MeshData):
     def __init__(self, width, height, lowerLeft, spacing):
@@ -146,21 +152,19 @@ class HexMeshData(MeshData):
             
         done = set()
         
-        for x in range(self.cols):
-            for y in range(self.rows):
-                if self.inside(x,y):
-                    neighbors = [self.getNeighbor(x,y,i) for i in range(self.numNeighbors)]
-                    for i in range(self.numNeighbors):
-                        triangle = ((x,y), tuple(neighbors[i-1]), tuple(neighbors[i]))
-                        sortedTriangle = tuple(sorted(triangle))
-                        if sortedTriangle not in done:
-                            done.add(sortedTriangle)
-                            v1,v2,v3 = (self.getCoordinates(p[0],p[1]) for p in triangle)
-                            z1,z2,z3 = (self.getData(p[0],p[1]) for p in triangle)
-                            mesh.append( (color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3))) )
-                            if not twoSided:
-                                z1,z2,z3 = 0.,0.,0.
-                            mesh.append( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
+        for x,y in self.getPoints():
+            neighbors = [self.getNeighbor(x,y,i) for i in range(self.numNeighbors)]
+            for i in range(self.numNeighbors):
+                triangle = ((x,y), tuple(neighbors[i-1]), tuple(neighbors[i]))
+                sortedTriangle = tuple(sorted(triangle))
+                if sortedTriangle not in done:
+                    done.add(sortedTriangle)
+                    v1,v2,v3 = (self.getCoordinates(p[0],p[1]) for p in triangle)
+                    z1,z2,z3 = (self.getData(p[0],p[1]) for p in triangle)
+                    mesh.append( (color,(Vector(v1.x,v1.y,z1), Vector(v2.x,v2.y,z2), Vector(v3.x,v3.y,z3))) )
+                    if not twoSided:
+                        z1,z2,z3 = 0.,0.,0.
+                    mesh.append( (color,(Vector(v3.x,v3.y,-z3), Vector(v2.x,v2.y,-z2), Vector(v1.x,v1.y,-z1))) )
         return mesh
 
 def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=None):
@@ -185,17 +189,18 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
     a region not aligned perfectly with the raster.
     """
     
-    if distanceToEdge == None:
-        distanceToEdge = lambda (x,y,i) : meshData.deltaLengths[i]
-    
     width = meshData.cols
     height = meshData.rows
-    raster = meshData.data
     
     k = meshData.numNeighbors
     alpha = 1 - 500 * inflationParams.flatness /  max(width,height)**2
     exponent = inflationParams.exponent
     invExponent = 1. / exponent
+    
+    if distanceToEdge == None:
+        adjustedDistances = tuple(tuple(tuple( 1.  for i in range(k)) for y in range(height)) for x in range(width))
+    else:
+        adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(width))
     
     if not inflationParams.iterations:
         iterations = 25 * max(width,height) 
@@ -204,23 +209,19 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
         
     meshData.clearData()
     
-    adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(width))
-    
     for iter in range(iterations):
         newData = tuple([0 for y in range(height)] for x in range(width))
 
-        for x in range(width): 
-            for y in range(height):
-                if meshData.mask[x][y]:
-                    s = 0
-                    w = 0
-                    
-                    for i in range(k):
-                        d = adjustedDistances[x][y][i]
-                        w += 1. / d
-                        s += (meshData.getNeighborData(x,y,i)**invExponent+d)**exponent / d
-                    
-                    newData[x][y] = alpha * s / w
+        for x,y in meshData.getPoints(): 
+            s = 0
+            w = 0
+            
+            for i in range(k):
+                d = adjustedDistances[x][y][i]
+                w += 1. / d
+                s += (meshData.getNeighborData(x,y,i)**invExponent+d)**exponent / d
+            
+            newData[x][y] = alpha * s / w
                     
         meshData.data = newData
         
