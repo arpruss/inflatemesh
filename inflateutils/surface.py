@@ -204,7 +204,7 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
         
     meshData.clearData()
     
-    adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(height))
+    adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(width))
     
     for iter in range(iterations):
         newData = tuple([0 for y in range(height)] for x in range(width))

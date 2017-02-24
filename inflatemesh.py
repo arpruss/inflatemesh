@@ -109,9 +109,8 @@ def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, 
         return state.bestLength
 
     message("Making edge distance map")
-    deltas = meshData.normalizedDeltas
-    deltasComplex = tuple( v.toComplex() for v in deltas )
-    map = [[[1. for i in range(len(deltas))] for row in range(meshData.rows)] for col in range(meshData.cols)]
+    deltasComplex = tuple( v.toComplex() for v in meshData.normalizedDeltas )
+    map = tuple(tuple([1. for i in range(len(deltasComplex))] for row in range(meshData.rows)) for col in range(meshData.cols))
     
     for col in range(meshData.cols):
         for row in range(meshData.rows):
