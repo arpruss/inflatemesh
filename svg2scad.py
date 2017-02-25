@@ -1,6 +1,6 @@
 from __future__ import division
-import svgpath.shader as shader
-import svgpath.parser as parser
+import inflateutils.svgpath.shader as shader
+import inflateutils.svgpath.parser as parser
 import sys
 import getopt
 from inflateutils.exportmesh import *
