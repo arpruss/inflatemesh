@@ -40,20 +40,20 @@ class PolygonData(object):
         self.edgeColor = edgeColor
         self.pointLists = []
     
-def extractSVGFile(svgFile, tolerance=0.1, baseName="svg"):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg"):
     polygons = []
 
-    paths = sortedApproximatePaths( parser.getPathsFromSVGFile(svgFile)[0], error=tolerance )
+    paths = sortedApproximatePaths(paths, error=tolerance )
     
     for i,path in enumerate(paths):
         polygon = PolygonData(path.svgState.fill,path.svgState.stroke)
         polygons.append(polygon)
         for j,subpath in enumerate(path.breakup()):
-            points = [subpath[0].start]
+            points = [subpath[0].start+offset]
             for line in subpath:
-                points.append(line.end)
+                points.append(line.end+offset)
             if subpath.closed and points[0] != points[-1]:
-                points.append(points[0])
+                points.append(points[0]+offset)
             updateBounds(polygon.bounds,points)
             polygon.pointLists.append(points)
         polygon.center = complex(0.5*(polygon.bounds[0]+polygon.bounds[2]),0.5*(polygon.bounds[1]+polygon.bounds[3]))
@@ -76,6 +76,7 @@ if __name__ == '__main__':
     tolerance = 0.1
     width = 1
     height = 10
+    centerPage = False
     
     def help(exitCode=0):
         help = """python svg2scad.py [options] filename.svg"""
@@ -87,7 +88,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["mode=", "help", "tolerance=", "ribbon", "polygons", "points", "width=", "height=", "tab=", "name="])
+                        ["mode=", "help", "tolerance=", "ribbon", "polygons", "points", "width=", "height=", "tab=", "name=", "center-page", "--xcenter-page="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -112,6 +113,10 @@ if __name__ == '__main__':
                 mode = "polygons"
             elif opt == "--points":
                 mode = "points"
+            elif opt == "--center-page":
+                centerPage = True
+            elif opt == "--xcenter-page":
+                centerPage = (arg == "true" or arg == "1")
             elif opt == "--mode":
                 mode = arg.strip().lower()
                 
@@ -122,7 +127,14 @@ if __name__ == '__main__':
         help(exitCode=1)
         sys.exit(2)
         
-    polygons = extractSVGFile(args[0], tolerance=tolerance, baseName=baseName)
+    paths, lowerLeft, upperRight = parser.getPathsFromSVGFile(args[0])
+    
+    if centerPage:
+        offset = -0.5*(lowerLeft+upperRight)
+    else:
+        offset = 0
+        
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName)
     
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
