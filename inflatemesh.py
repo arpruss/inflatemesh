@@ -248,7 +248,20 @@ if __name__ == '__main__':
     centerPage = False
     
     def help(exitCode=0):
-        help = """python inflate.py [options] filename.svg"""
+        help = """python inflate.py [options] filename.svg
+options:
+--help:         this message        
+--stl:          output to STL (default: OpenSCAD)
+--rectangular:  use mesh over rectangular grid (default: hexagonal)
+--flatness=x:   make the top flatter; reasonable range: 0.0-10.0 (default: 0.0)
+--height=x:     make the inflated stuff have height (or thickness) x millimeters (default: 10)
+--exponent=x:   controls how rounded the inflated image is; must be bigger than 0.0 (default: 0.0)
+--resolution=n: approximate mesh resolution along the larger dimension (default: 30)
+--iterations=n: number of iterations in calculation (default depends on resolution)
+--two-sided:    inflate both up and down
+--center-page:  put the center of the SVG page at (0,0,0) in the OpenSCAD file
+--output=file:  write output to file (default: stdout)
+"""
         if exitCode:
             sys.stderr.write(help + "\n")
         else:
