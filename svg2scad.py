@@ -71,7 +71,7 @@ def describeColor(c):
     
 if __name__ == '__main__':
     outfile = None
-    mode = "svg"
+    mode = "points"
     baseName = "svg"
     tolerance = 0.1
     width = 1
@@ -79,7 +79,18 @@ if __name__ == '__main__':
     centerPage = False
     
     def help(exitCode=0):
-        help = """python svg2scad.py [options] filename.svg"""
+        help = """python svg2scad.py [options] filename.svg
+options:
+--help:         this message        
+--tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
+--ribbon:       make ribbons out of paths
+--polygons:     make polygons out of paths (requires manual adjustment of holes)
+--width:        ribbon width (thickness)
+--height:       ribbon or polygon height in millimeters; if zero, they're two-dimensional (default: 10)
+--name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
+--center-page:  put the center of the SVG page at (0,0,0) in the OpenSCAD file
+--output=file:  write output to file (default: stdout)
+"""
         if exitCode:
             sys.stderr.write(help + "\n")
         else:

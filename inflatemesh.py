@@ -248,7 +248,7 @@ if __name__ == '__main__':
     centerPage = False
     
     def help(exitCode=0):
-        help = """python inflate.py [options] filename.svg
+        help = """python inflatemesh.py [options] filename.svg
 options:
 --help:         this message        
 --stl:          output to STL (default: OpenSCAD)
@@ -259,6 +259,7 @@ options:
 --resolution=n: approximate mesh resolution along the larger dimension (default: 30)
 --iterations=n: number of iterations in calculation (default depends on resolution)
 --two-sided:    inflate both up and down
+--name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
 --center-page:  put the center of the SVG page at (0,0,0) in the OpenSCAD file
 --output=file:  write output to file (default: stdout)
 """
