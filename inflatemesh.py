@@ -257,7 +257,7 @@ if __name__ == '__main__':
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "thickness=", 
+                        ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "height=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
                         "output=", "center-page", "xcenter-page="])
         # TODO: support width for ribbon-thin stuff
@@ -273,7 +273,7 @@ if __name__ == '__main__':
                 sys.exit(0)
             elif opt == '--flatness':
                 params.flatness = float(arg)
-            elif opt == '--thickness':
+            elif opt == '--height':
                 params.thickness = float(arg)
             elif opt == '--resolution':
                 gridSize = int(arg)

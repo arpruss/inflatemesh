@@ -16,7 +16,7 @@
       <param name="resolution" type="int" min="2" max="1000" _gui-text="Approx. grid resolution:" _gui-description="Set approximate mesh resolution (Default: 30)">30</param>
       <param name="flatness" type="float" min="0.00" max="10.0" precision="3" _gui-text="Flatness (0-10):" _gui-description="Flatness of top for inflation (Default: 0)">0</param>
       <param name="exponent" type="float" min="0.00001" max="10.0" precision="3" _gui-text="Exponent (0.00001-10):" _gui-description="Exponent controlling shape roundness (Default: 2)">2</param>
-      <param name="thickness" type="float" min="0.01" max="1000000.0" precision="3" _gui-text="Thickness (mm):" _gui-description="Thickness of inflated mesh (Default: 10)">10</param>
+      <param name="height" type="float" min="0.01" max="1000000.0" precision="3" _gui-text="Thickness (mm):" _gui-description="Thickness of inflated mesh (Default: 10)">10</param>
       <param name="mesh" type="enum" _gui-text="Mesh type:" _gui-description="Mesh type (Default: hexagonal)">
         <item value="hexagonal">hexagonal</item>
         <item value="rectangular">rectangular</item>
