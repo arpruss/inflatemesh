@@ -273,13 +273,12 @@ options:
         else:
             print(help)
         sys.exit(exitCode)
-    
+
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "height=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
                         "output=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
-        # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")

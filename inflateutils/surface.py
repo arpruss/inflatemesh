@@ -193,6 +193,8 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
     
     k = meshData.numNeighbors
     alpha = 1 - 500 * inflationParams.flatness /  max(width,height)**2
+    if alpha < 0:
+        alpha = 1e-15
     exponent = inflationParams.exponent
     invExponent = 1. / exponent
     
