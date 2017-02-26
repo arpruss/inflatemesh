@@ -174,6 +174,11 @@ def applyMatrix(matrix, z):
              z.real * matrix[3] + z.imag * matrix[4] + matrix[5] )
              
 def matrixMultiply(matrix1, matrix2):
+    if matrix1 is None:
+        return matrix2
+    elif matrix2 is None:
+        return matrix1
+        
     m1 = [matrix1[0:3], matrix1[3:6] ] # don't need last row
     m2 = [matrix2[0:3], matrix2[3:6], [0,0,1]]
 
@@ -449,9 +454,14 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     def updateMatrix(tree, matrix):
         def reorder(a,b,c,d,e,f):
             return [a,c,e, b,d,f]            
-    
+            
         try:
-            cmd = re.split(r'[,()\s]+', tree.attrib['transform'].strip().lower())
+            transformList = re.split(r'\)[\s,]+', tree.attrib['transform'].strip().lower())
+        except KeyError:
+            return matrix
+            
+        for transform in (transformList):
+            cmd = re.split(r'[,()\s]+', transform)
             
             updateMatrix = None
             
@@ -488,9 +498,9 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 theta = float(cmd[1]) * math.pi / 180.
                 updateMatrix = [1,0,0, math.tan(theta),1,0]
                 
-            return matrixMultiply(matrix, updateMatrix)
-        except:
-            return matrix
+            matrix = matrixMultiply(matrix, updateMatrix)
+            
+        return matrix
 
     def getPaths(paths, matrix, tree, state):
         tag = re.sub(r'.*}', '', tree.tag)

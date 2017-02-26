@@ -40,13 +40,16 @@ class PolygonData(object):
         self.edgeColor = edgeColor
         self.pointLists = []
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg"):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
     
     for i,path in enumerate(paths):
-        polygon = PolygonData(path.svgState.fill,path.svgState.stroke)
+        if colors:
+            polygon = PolygonData(path.svgState.fill,path.svgState.stroke)
+        else:
+            polygon = PolygonData(None,None)
         polygons.append(polygon)
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start+offset]
@@ -76,6 +79,7 @@ if __name__ == '__main__':
     tolerance = 0.1
     width = 1
     height = 10
+    colors = True
     centerPage = False
     
     def help(exitCode=0):
@@ -87,6 +91,7 @@ options:
 --polygons:     make polygons out of paths (requires manual adjustment of holes)
 --width:        ribbon width (thickness)
 --height:       ribbon or polygon height in millimeters; if zero, they're two-dimensional (default: 10)
+--no-colors:    omit colors from SVG file (default: include colors)
 --name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
 --center-page:  put the center of the SVG page at (0,0,0) in the OpenSCAD file
 --output=file:  write output to file (default: stdout)
@@ -99,7 +104,8 @@ options:
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["mode=", "help", "tolerance=", "ribbon", "polygons", "points", "width=", "height=", "tab=", "name=", "center-page", "--xcenter-page="])
+                        ["mode=", "help", "tolerance=", "ribbon", "polygons", "points", "width=", 
+                        "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -128,6 +134,10 @@ options:
                 centerPage = True
             elif opt == "--xcenter-page":
                 centerPage = (arg == "true" or arg == "1")
+            elif opt == "--xcolors":
+                colors = (arg == "true" or arg == "1")
+            elif opt == "--no-colors":
+                colors = False
             elif opt == "--mode":
                 mode = arg.strip().lower()
                 
@@ -145,7 +155,7 @@ options:
     else:
         offset = 0
         
-    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName)
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors)
     
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
@@ -212,7 +222,7 @@ options:
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
             if polygon.fillColor is not None:
                 scad += "color(fill_color_%s) " % (polyName(i),)
-            elif d.edgeColor is not None:
+            elif polygon.edgeColor is not None:
                 scad += "color(outline_color_%s) " % (polyName(i),)
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
