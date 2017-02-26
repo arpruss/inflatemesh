@@ -22,6 +22,7 @@
         <item value="rectangular">rectangular</item>
       </param>
       <param name="xtwo-sided" type="boolean" _gui-text="Two sided" _gui-description="Two sided inflation">0</param>
+      <param name="xcolors" type="boolean" _gui-text="Include colors" _gui-description="This includes the colors from the Inkscape file.">1</param>
       </param>
     </page>
   <script>

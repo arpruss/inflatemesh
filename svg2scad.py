@@ -174,8 +174,9 @@ options:
         
     for i,polygon in enumerate(polygons):
         scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.center.real, polygon.center.imag)
-        scad += "fill_color_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
-        scad += "outline_color_%s = %s;\n\n" % (polyName(i), describeColor(polygon.edgeColor))
+        if colors:
+            scad += "fill_color_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
+            scad += "outline_color_%s = %s;\n\n" % (polyName(i), describeColor(polygon.edgeColor))
         
     for i,polygon in enumerate(polygons):
         scad += "// paths for %s\n" % polyName(i)
@@ -203,10 +204,11 @@ options:
         
         for i,polygon in enumerate(polygons):
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
-            if polygon.edgeColor is not None:
-                scad += "color(outline_color_%s) " % (polyName(i),)
-            elif polygon.fillColor is not None:
-                scad += "color(fill_color_%s) " % (polyName(i),)
+            if colors:
+                if polygon.edgeColor is not None:
+                    scad += "color(outline_color_%s) " % (polyName(i),)
+                elif polygon.fillColor is not None:
+                    scad += "color(fill_color_%s) " % (polyName(i),)
                 
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
@@ -220,10 +222,11 @@ options:
     
         for i,polygon in enumerate(polygons):
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
-            if polygon.fillColor is not None:
-                scad += "color(fill_color_%s) " % (polyName(i),)
-            elif polygon.edgeColor is not None:
-                scad += "color(outline_color_%s) " % (polyName(i),)
+            if colors:
+                if polygon.fillColor is not None:
+                    scad += "color(fill_color_%s) " % (polyName(i),)
+                elif polygon.edgeColor is not None:
+                    scad += "color(outline_color_%s) " % (polyName(i),)
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"

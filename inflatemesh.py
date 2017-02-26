@@ -197,7 +197,7 @@ def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False
 class InflatedData(object):
     pass
                 
-def inflatePaths(paths, gridSize=30, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j):
+def inflatePaths(paths, gridSize=30, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j, colors=True):
     data = InflatedData()
     data.meshes = []
 
@@ -206,7 +206,7 @@ def inflatePaths(paths, gridSize=30, inflationParams=None, twoSided=False, ignor
     for i,path in enumerate(paths):
         inflateThis = inflate and path.svgState.fill is not None
         if inflateThis:
-            mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=ignoreColor, offset=offset)
+            mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=not colors, offset=offset)
             name = "inflated_" + baseName
             if len(paths)>1:
                 name += "_" + str(i+1)
@@ -245,6 +245,7 @@ if __name__ == '__main__':
     outfile = None
     gridSize = 30
     baseName = "svg"
+    colors = True
     centerPage = False
     
     def help(exitCode=0):
@@ -259,8 +260,9 @@ options:
 --resolution=n: approximate mesh resolution along the larger dimension (default: 30)
 --iterations=n: number of iterations in calculation (default depends on resolution)
 --two-sided:    inflate both up and down
---name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
+--no-colors:    omit colors from SVG file (default: include colors)
 --center-page:  put the center of the SVG page at (0,0,0) in the OpenSCAD file
+--name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
 --output=file:  write output to file (default: stdout)
 """
         if exitCode:
@@ -273,7 +275,7 @@ options:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "height=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
-                        "output=", "center-page", "xcenter-page="])
+                        "output=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
         # TODO: support width for ribbon-thin stuff
 
         if len(args) == 0:
@@ -319,6 +321,10 @@ options:
                 centerPage = True
             elif opt == "--xcenter-page":
                 centerPage = (arg == "true" or arg == "1")
+            elif opt == "--xcolors":
+                colors = (arg == "true" or arg == "1")
+            elif opt == "--no-colors":
+                colors = False
             i += 1
                 
     except getopt.GetoptError as e:
@@ -334,9 +340,9 @@ options:
     if centerPage:
         offset = -0.5*(lowerLeft+upperRight)
     else:
-        offset = 0
+        offset = 0j
         
-    data = inflatePaths(paths, inflationParams=params, gridSize=gridSize, twoSided=twoSided, baseName=baseName, offset=offset)
+    data = inflatePaths(paths, inflationParams=params, gridSize=gridSize, twoSided=twoSided, baseName=baseName, offset=offset, colors=colors)
     
     if format == 'stl':
         mesh = [datum for name,mesh in data.meshes for datum in mesh]
