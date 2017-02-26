@@ -351,13 +351,13 @@ options:
         scad = ""
         for name,mesh in data.meshes:
             mesh,centerX,centerY,width,height = recenterMesh(mesh)
-            scad += name + "_center = [%.5f,%.5f];\n" % (centerX,centerY)
-            scad += name + "_size = [%.5f,%.5f];\n\n" % (width,height)
+            scad += "center_%s = [%.5f,%.5f];\n" % (name,centerX,centerY)
+            scad += "size_%s = [%.5f,%.5f];\n\n" % (name,width,height)
             scad += toSCADModule(mesh, moduleName=name, coordinateFormat="%.5f")
             scad += "\n"
         
         for name,_ in data.meshes:
-            scad += "translate(%s_center) %s();\n" % (name,name)
+            scad += "translate(center_%s) %s();\n" % (name,name)
             
         if outfile:
             with open(outfile, "w") as f: f.write(scad)
