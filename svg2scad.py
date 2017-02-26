@@ -7,18 +7,6 @@ from inflateutils.exportmesh import *
 
 quiet = False
 
-def updateBounds(bounds,points):
-    bounds[0] = min(bounds[0], min(p.real for p in points))
-    bounds[1] = min(bounds[1], min(p.imag for p in points))
-    bounds[2] = max(bounds[0], max(p.real for p in points))
-    bounds[3] = max(bounds[1], max(p.imag for p in points))
-    
-def getCenterX(bounds):
-    return 0.5*(bounds[0]+bounds[2])
-
-def getCenterY(bounds):
-    return 0.5*(bounds[1]+bounds[3])
-
 def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
@@ -34,43 +22,55 @@ def sortedApproximatePaths(paths,error=0.1):
     return sorted(paths, key=key)
 
 class PolygonData(object):
-    def __init__(self,fillColor,edgeColor):
+    def __init__(self,color):
         self.bounds = [float("inf"),float("inf"),float("-inf"),float("-inf")]
-        self.fillColor = fillColor
-        self.edgeColor = edgeColor
+        self.color = color
         self.pointLists = []
+        
+    def updateBounds(self,z):
+        self.bounds[0] = min(self.bounds[0], z.real)
+        self.bounds[1] = min(self.bounds[1], z.imag)
+        self.bounds[2] = max(self.bounds[0], z.real)
+        self.bounds[3] = max(self.bounds[1], z.imag)
+
+    def getCenter(self):
+        return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
+
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
     
     for i,path in enumerate(paths):
+        color = None
         if colors:
-            polygon = PolygonData(path.svgState.fill,path.svgState.stroke)
-        else:
-            polygon = PolygonData(None,None)
+            if colorFromFill:
+                if path.svgState.fill is not None:
+                    color = path.svgState.fill
+                else:
+                    color = path.svgState.stroke
+            else:
+                if path.svgState.stroke is not None:
+                    color = path.svgState.stroke
+                else:
+                    color = path.svgState.fill
+        polygon = PolygonData(color)
         polygons.append(polygon)
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start+offset]
+            polygon.updateBounds(points[-1])
             for line in subpath:
                 points.append(line.end+offset)
+                polygon.updateBounds(points[-1])
             if subpath.closed and points[0] != points[-1]:
                 points.append(points[0]+offset)
-            updateBounds(polygon.bounds,points)
             polygon.pointLists.append(points)
-        polygon.center = complex(0.5*(polygon.bounds[0]+polygon.bounds[2]),0.5*(polygon.bounds[1]+polygon.bounds[3]))
         for points in polygon.pointLists:
             for j in range(len(points)):
-                points[j] -= polygon.center
+                points[j] -= polygon.getCenter()
             
     return polygons
-    
-def describeColor(c):
-    if c is None:
-        return "undef";
-    else:
-        return "[%.5f,%.5f,%.5f]" % tuple(c)
     
 if __name__ == '__main__':
     outfile = None
@@ -155,7 +155,7 @@ options:
     else:
         offset = 0
         
-    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors)
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')))
     
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
@@ -173,10 +173,10 @@ options:
         return polyName(i) + "_" + str(j+1)
         
     for i,polygon in enumerate(polygons):
-        scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.center.real, polygon.center.imag)
+        scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.getCenter().real, polygon.getCenter().imag)
+        scad += "size_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.bounds[2]-polygon.bounds[0],polygon.bounds[3]-polygon.bounds[1])
         if colors:
-            scad += "fill_color_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
-            scad += "outline_color_%s = %s;\n\n" % (polyName(i), describeColor(polygon.edgeColor))
+            scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
         
     for i,polygon in enumerate(polygons):
         scad += "// paths for %s\n" % polyName(i)
@@ -205,10 +205,7 @@ options:
         for i,polygon in enumerate(polygons):
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
             if colors:
-                if polygon.edgeColor is not None:
-                    scad += "color(outline_color_%s) " % (polyName(i),)
-                elif polygon.fillColor is not None:
-                    scad += "color(fill_color_%s) " % (polyName(i),)
+                scad += "color(color_%s) " % (polyName(i),)
                 
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
@@ -223,10 +220,7 @@ options:
         for i,polygon in enumerate(polygons):
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
             if colors:
-                if polygon.fillColor is not None:
-                    scad += "color(fill_color_%s) " % (polyName(i),)
-                elif polygon.edgeColor is not None:
-                    scad += "color(outline_color_%s) " % (polyName(i),)
+                scad += "color(color_%s) " % (polyName(i),)
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"

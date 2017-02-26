@@ -70,7 +70,7 @@ def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
     
-def inflatePolygon(polygon, gridSize=30, shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
+def inflatePolygon(polygon, gridSize=15, shadeMode=shader.Shader.MODE_EVEN_ODD, inflationParams=None,
         center=False, twoSided=False, color=None):
     # polygon is described by list of (start,stop) pairs, where start and stop are complex numbers
     message("Rasterizing")
@@ -186,7 +186,7 @@ def sortedApproximatePaths(paths,error=0.1):
         
     return sorted(paths, key=key)
 
-def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False, offset=0j):
+def inflateLinearPath(path, gridSize=15, inflationParams=None, ignoreColor=False, offset=0j):
     lines = []
     for line in path:
         lines.append((line.start+offset,line.end+offset))
@@ -197,7 +197,7 @@ def inflateLinearPath(path, gridSize=30, inflationParams=None, ignoreColor=False
 class InflatedData(object):
     pass
                 
-def inflatePaths(paths, gridSize=30, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j, colors=True):
+def inflatePaths(paths, gridSize=15, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j, colors=True):
     data = InflatedData()
     data.meshes = []
 
@@ -236,6 +236,9 @@ def recenterMesh(mesh):
         
     return newMesh, center.x, center.y, rightX-leftX, topX-bottomX
     
+def getColorFromMesh(mesh):
+    return mesh[0][0]
+    
 if __name__ == '__main__':
     import cmath
     
@@ -243,7 +246,7 @@ if __name__ == '__main__':
     output = "stl"
     twoSided = False
     outfile = None
-    gridSize = 30
+    gridSize = 15
     baseName = "svg"
     colors = True
     centerPage = False
@@ -257,7 +260,7 @@ options:
 --flatness=x:   make the top flatter; reasonable range: 0.0-10.0 (default: 0.0)
 --height=x:     make the inflated stuff have height (or thickness) x millimeters (default: 10)
 --exponent=x:   controls how rounded the inflated image is; must be bigger than 0.0 (default: 0.0)
---resolution=n: approximate mesh resolution along the larger dimension (default: 30)
+--resolution=n: approximate mesh resolution along the larger dimension (default: 15)
 --iterations=n: number of iterations in calculation (default depends on resolution)
 --two-sided:    inflate both up and down
 --no-colors:    omit colors from SVG file (default: include colors)
@@ -349,11 +352,15 @@ options:
         saveSTL(outfile, mesh, quiet=quiet)
     else:
         scad = ""
-        for name,mesh in data.meshes:
+        for i,(name,mesh) in enumerate(data.meshes):
             mesh,centerX,centerY,width,height = recenterMesh(mesh)
+            data.meshes[i] = (name,mesh)
             scad += "center_%s = [%.5f,%.5f];\n" % (name,centerX,centerY)
-            scad += "size_%s = [%.5f,%.5f];\n\n" % (name,width,height)
-            scad += toSCADModule(mesh, moduleName=name, coordinateFormat="%.5f")
+            scad += "size_%s = [%.5f,%.5f];\n" % (name,width,height)
+            scad += "color_%s = [%.5f,%.5f,%.5f];\n\n" % ((name,)+getColorFromMesh(mesh))
+            
+        for name,mesh in data.meshes:
+            scad += toSCADModule(mesh, moduleName=name, coordinateFormat="%.5f", colorOverride="color_%s" % (name,))
             scad += "\n"
         
         for name,_ in data.meshes:

@@ -4,6 +4,11 @@ from numbers import Number
 import os
 import sys
 
+try:
+    basestring
+except:
+    basestring = str
+
 def isColorTriangleList(polys):
     return isinstance(polys[0][1][0][0], Number)
     
@@ -23,7 +28,15 @@ def toMesh(polys):
                 output.append((rgb,face))
         return output
 
-def toSCADModule(polys, moduleName, coordinateFormat="%.9f"):
+def describeColor(c):
+    if c is None:
+        return "undef";
+    elif isinstance(c, str):
+        return c
+    else:
+        return "[%.5f,%.5f,%.5f]" % tuple(c)
+
+def toSCADModule(polys, moduleName, coordinateFormat="%.9f", colorOverride=None):
     """
     INPUT:
     polys: list of (color,polyhedra) pairs (counterclockwise triangles), or a list of (color,triangle) pairs (TODO: currently uses first color for all in latter case)
@@ -37,10 +50,10 @@ def toSCADModule(polys, moduleName, coordinateFormat="%.9f"):
     scad = []
     scad.append("module " +moduleName+ "() {")
     for rgb,poly in polys:
-        if rgb is not None:
-            line = "  color([%.3f,%.3f,%.3f]) " % tuple(min(max(c,0.),1.) for c in rgb)
+        if colorOverride or rgb:
+            line = "  color(%s) " % describeColor(colorOverride if colorOverride else tuple(min(max(c,0.),1.0) for c in rgb))
         else:
-            line = ""
+            line = "  "
         pointsDict = {}
         i = 0
         line += "polyhedron(points=["
