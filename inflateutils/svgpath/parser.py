@@ -451,16 +451,16 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             state.strokeWidth = (h+w)/2
         return state
         
+    def reorder(a,b,c,d,e,f):
+        return [a,c,e, b,d,f]            
+        
     def updateMatrix(tree, matrix):
-        def reorder(a,b,c,d,e,f):
-            return [a,c,e, b,d,f]            
-            
         try:
             transformList = re.split(r'\)[\s,]+', tree.attrib['transform'].strip().lower())
         except KeyError:
             return matrix
             
-        for transform in (transformList):
+        for transform in transformList:
             cmd = re.split(r'[,()\s]+', transform)
             
             updateMatrix = None
@@ -502,8 +502,13 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             
         return matrix
 
-    def getPaths(paths, matrix, tree, state):
+    def getPaths(paths, matrix, tree, state, savedElements):
         tag = re.sub(r'.*}', '', tree.tag)
+        try:
+            savedElements[tree.attrib['id']] = tree
+        except KeyError:
+            pass
+            
         state = updateState(tree, state, matrix)
         if tag == 'path':
             svgState = updateState(tree, state, matrix)
@@ -513,7 +518,33 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         elif tag == 'g' or tag == 'svg':
             matrix = updateMatrix(tree, matrix)
             for child in tree:
-                getPaths(paths, matrix, child, state)
+                getPaths(paths, matrix, child, state, savedElements)
+        elif tag == 'use':
+            try:
+                link = None
+                for tag in tree.attrib:
+                    if tag.strip().lower().endswith("}href"):
+                        link = tree.attrib[tag]
+                        break
+                if link is None or link[0] is not '#':
+                    raise KeyError
+                source = savedElements[link[1:]]
+                x = 0
+                y = 0
+                try:
+                    x = float(tree.attrib['x'])
+                except:
+                    pass
+                try:
+                    y = float(tree.attrib['y'])
+                except:
+                    pass
+                # TODO: handle width and height? (Inkscape does not)
+                matrix = updateMatrix(tree, matrix)
+                matrix = matrixMultiply(matrix, reorder(1,0,0,1,x,y))
+                getPaths(paths, matrix, source, state, dict(savedElements))
+            except KeyError:
+                pass
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
@@ -538,7 +569,7 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     else:
         matrix += [height/(viewBox[3]-viewBox[1]), -viewBox[1]*height/(viewBox[3]-viewBox[1]) ]
     
-    getPaths(paths, matrix, svg, path.SVGState())
+    getPaths(paths, matrix, svg, path.SVGState(), {})
 
     scaler = lambda z : applyMatrix(matrix, z)
     
