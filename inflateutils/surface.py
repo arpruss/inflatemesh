@@ -203,12 +203,27 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
     else:
         adjustedDistances = tuple(tuple(tuple( min(distanceToEdge(x,y,i) / meshData.getDeltaLength(x,y,i), 1.)  for i in range(k)) for y in range(height)) for x in range(width))
     
+    meshData.clearData()
+    
     if not inflationParams.iterations:
         iterations = 25 * max(width,height) 
     else:
         iterations = inflationParams.iterations
-        
-    meshData.clearData()
+       
+    """
+    if exponent >= 1 and alpha == 1 and (isinstance(meshData,HexMeshData) or isinstance(meshData,RectMeshData)):
+        # Use a lower bound based on Holder inequality and Lawler _Random Walk and the Heat Equation_ Sect. 1.4
+        # to initialize meshData (the martingale stuff there works both for both rectangular and hexagonal grids).
+        for col,row in meshData.getPoints():
+            r2 = float("inf")
+            x,y = meshData.getCoordinates(col,row)
+            for col2,row2 in meshData.getPoints(useMask=False):
+                if not meshData.inside(col2,row2):
+                    x2,y2 = meshData.getCoordinates(col2,row2)
+                    r2 = min(r2,(x-x2)*(x-x2) + (y-y2)*(y-y2))
+            r2 /= meshData.getDeltaLength(0,0,0) ** 2
+            meshData.data[col][row] = r2**exponent if r2 < float("inf") else 0.
+    """
     
     for iter in range(iterations):
         newData = tuple([0 for y in range(height)] for x in range(width))
