@@ -241,8 +241,6 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
                     
         meshData.data = newData
         
-    data = tuple([point**invExponent for point in col] for col in meshData.data)
-
-    maxZ = max(max(col) for col in data)
+    maxZ = max(max(col) for col in meshData.data) ** invExponent
     
-    meshData.data = tuple([datum / maxZ * inflationParams.thickness for datum in col] for col in data)
+    meshData.data = tuple([datum ** invExponent / maxZ * inflationParams.thickness for datum in col] for col in meshData.data)
