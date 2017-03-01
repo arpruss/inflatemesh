@@ -197,14 +197,14 @@ def inflateLinearPath(path, gridSize=15, inflationParams=None, ignoreColor=False
 class InflatedData(object):
     pass
                 
-def inflatePaths(paths, gridSize=15, inflationParams=None, twoSided=False, ignoreColor=False, inflate=True, baseName="path", offset=0j, colors=True):
+def inflatePaths(paths, gridSize=15, inflationParams=None, twoSided=False, ignoreColor=False, baseName="path", offset=0j, colors=True):
     data = InflatedData()
     data.meshes = []
 
     paths = sortedApproximatePaths( paths, error=0.1 )
     
     for i,path in enumerate(paths):
-        inflateThis = inflate and path.svgState.fill is not None
+        inflateThis = path.svgState.fill is not None
         if inflateThis:
             mesh = inflateLinearPath(path, gridSize=gridSize, inflationParams=inflationParams, ignoreColor=not colors, offset=offset)
             name = "inflated_" + baseName
