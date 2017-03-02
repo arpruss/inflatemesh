@@ -367,6 +367,12 @@ def parse_path(pathdef, current_pos=0j, matrix = None, svgState=None):
 
     return segments
 
+def path_from_ellipse(x, y, rx, ry, matrix, state):
+    arc = "M %.9f %.9f " % (x-rx,y)
+    arc += "A %.9f %.9f 0 0 1 %.9f %.9f " % (rx, ry, x+rx,y) 
+    arc += "A %.9f %.9f 0 0 1 %.9f %.9f" % (rx, ry, x-rx,y) 
+    return parse_path(arc, matrix=matrix, svgState=state)
+
 def sizeFromString(text):
     """
     Returns size in mm, if possible.
@@ -501,22 +507,37 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             matrix = matrixMultiply(matrix, updateMatrix)
             
         return matrix
+        
+    def updateStateAndMatrix(tree,state,matrix):
+        matrix = updateMatrix(tree,matrix)
+        return updateState(tree,state,matrix),matrix
 
     def getPaths(paths, matrix, tree, state, savedElements):
-        tag = re.sub(r'.*}', '', tree.tag)
+        tag = re.sub(r'.*}', '', tree.tag).lower()
         try:
             savedElements[tree.attrib['id']] = tree
         except KeyError:
             pass
             
-        state = updateState(tree, state, matrix)
+        state, matrix = updateStateAndMatrix(tree, state, matrix)
         if tag == 'path':
-            svgState = updateState(tree, state, matrix)
-            matrix = updateMatrix(tree, matrix)
-            path = parse_path(tree.attrib['d'], matrix=matrix, svgState=svgState)
+            path = parse_path(tree.attrib['d'], matrix=matrix, state=state)
+            paths.append(path)
+        elif tag == 'circle':
+            path = path_from_ellipse(float(tree.attrib['cx']), float(tree.attrib['cy']), float(tree.attrib['r']), float(tree.attrib['r']), matrix, state)
+            paths.append(path)
+        elif tag == 'ellipse':
+            path = path_from_ellipse(float(tree.attrib['cx']), float(tree.attrib['cy']), float(tree.attrib['rx']), float(tree.attrib['ry']), matrix, state)
+            paths.append(path)
+        elif tag == 'line':
+            x1 = tree.attrib['x1']
+            y1 = tree.attrib['y1']
+            x2 = tree.attrib['x2']
+            y2 = tree.attrib['y2']
+            p = 'M %s %s L %s %s' % (x1,y1,x2,y2)
+            path = parse_path(p, matrix=matrix, state=state)
             paths.append(path)
         elif tag == 'g' or tag == 'svg':
-            matrix = updateMatrix(tree, matrix)
             for child in tree:
                 getPaths(paths, matrix, child, state, savedElements)
         elif tag == 'use':
@@ -540,7 +561,6 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 except:
                     pass
                 # TODO: handle width and height? (Inkscape does not)
-                matrix = updateMatrix(tree, matrix)
                 matrix = matrixMultiply(matrix, reorder(1,0,0,1,x,y))
                 getPaths(paths, matrix, source, state, dict(savedElements))
             except KeyError:
