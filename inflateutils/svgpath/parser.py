@@ -537,6 +537,17 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             p = 'M %s %s L %s %s' % (x1,y1,x2,y2)
             path = parse_path(p, matrix=matrix, state=state)
             paths.append(path)
+        elif tag == 'polygon':
+            points = re.split(r'[\s,]+', tree.attrib['points'].strip())
+            p = ' '.join('M', points[0], points[1], 'L', *points[2:], 'Z')
+            path = parse_path(p, matrix=matrix, state=state)
+            paths.append(path)
+        elif tag == 'polyline':
+            points = re.split(r'[\s,]+', tree.attrib['points'].strip())
+            p = ' '.join('M', points[0], points[1], 'L', *points[2:])
+            path = parse_path(p, matrix=matrix, state=state)
+            paths.append(path)
+            ## TODO: rectangle
         elif tag == 'g' or tag == 'svg':
             for child in tree:
                 getPaths(paths, matrix, child, state, savedElements)
