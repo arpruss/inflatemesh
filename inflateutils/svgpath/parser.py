@@ -373,6 +373,24 @@ def path_from_ellipse(x, y, rx, ry, matrix, state):
     arc += "A %.9f %.9f 0 0 1 %.9f %.9f" % (rx, ry, x-rx,y) 
     return parse_path(arc, matrix=matrix, svgState=state)
 
+def path_from_rect(x,y,w,h,rx,ry, matrix,state):
+    if not rx and not ry:
+        rect = "M %.9f %.9f h %.9f v %.9f h %.9f Z" % (x,y,w,h,-w)
+    else:
+        if rx is None:
+            rx = ry
+        elif ry is None:
+            ry = rx
+        rect = "M %.9f %.9f h %.9f " % (x+rx,y,w-2*rx)
+        rect += "a %.9f %.9f 0 0 1 %.9f %.9f " % (rx, ry, rx, ry)
+        rect += "v %.9f " % (h-2*ry)
+        rect += "a %.9f %.9f 0 0 1 %.9f %.9f " % (rx, ry, -rx, ry)
+        rect += "h %.9f " % -(w-2*rx)
+        rect += "a %.9f %.9f 0 0 1 %.9f %.9f " % (rx, ry, -rx, -ry)
+        rect += "v %.9f " % -(h-2*ry)
+        rect += "a %.9f %.9f 0 0 1 %.9f %.9f Z" % (rx, ry, rx, -ry)
+    return parse_path(rect, matrix=matrix, svgState=state)
+    
 def sizeFromString(text):
     """
     Returns size in mm, if possible.
@@ -511,8 +529,14 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     def updateStateAndMatrix(tree,state,matrix):
         matrix = updateMatrix(tree,matrix)
         return updateState(tree,state,matrix),matrix
-
+        
     def getPaths(paths, matrix, tree, state, savedElements):
+        def getFloat(attribute,default=0.):
+            try:
+                return float(tree.attrib[attribute].strip())
+            except KeyError:
+                return default
+
         tag = re.sub(r'.*}', '', tree.tag).lower()
         try:
             savedElements[tree.attrib['id']] = tree
@@ -521,33 +545,41 @@ def getPathsFromSVG(svg,yGrowsUp=True):
             
         state, matrix = updateStateAndMatrix(tree, state, matrix)
         if tag == 'path':
-            path = parse_path(tree.attrib['d'], matrix=matrix, state=state)
+            path = parse_path(tree.attrib['d'], matrix=matrix, svgState=state)
             paths.append(path)
         elif tag == 'circle':
-            path = path_from_ellipse(float(tree.attrib['cx']), float(tree.attrib['cy']), float(tree.attrib['r']), float(tree.attrib['r']), matrix, state)
+            path = path_from_ellipse(getFloat('cx'), getFloat('cy'), getFloat('r'), getFloat('r'), matrix, state)
             paths.append(path)
         elif tag == 'ellipse':
-            path = path_from_ellipse(float(tree.attrib['cx']), float(tree.attrib['cy']), float(tree.attrib['rx']), float(tree.attrib['ry']), matrix, state)
+            path = path_from_ellipse(getFloat('cx'), getFloat('cy'), getFloat('rx'), getFloat('ry'), matrix, state)
             paths.append(path)
         elif tag == 'line':
-            x1 = tree.attrib['x1']
-            y1 = tree.attrib['y1']
-            x2 = tree.attrib['x2']
-            y2 = tree.attrib['y2']
-            p = 'M %s %s L %s %s' % (x1,y1,x2,y2)
-            path = parse_path(p, matrix=matrix, state=state)
+            x1 = getFloat('x1')
+            y1 = getFloat('y1')
+            x2 = getFloat('x2')
+            y2 = getFloat('y2')
+            p = 'M %.9f %.9f L %.9f %.9f' % (x1,y1,x2,y2)
+            path = parse_path(p, matrix=matrix, svgState=state)
             paths.append(path)
         elif tag == 'polygon':
             points = re.split(r'[\s,]+', tree.attrib['points'].strip())
-            p = ' '.join('M', points[0], points[1], 'L', *points[2:], 'Z')
-            path = parse_path(p, matrix=matrix, state=state)
+            p = ' '.join(['M', points[0], points[1], 'L'] + points[2:] + ['Z'])
+            path = parse_path(p, matrix=matrix, svgState=state)
             paths.append(path)
         elif tag == 'polyline':
             points = re.split(r'[\s,]+', tree.attrib['points'].strip())
-            p = ' '.join('M', points[0], points[1], 'L', *points[2:])
-            path = parse_path(p, matrix=matrix, state=state)
+            p = ' '.join(['M', points[0], points[1], 'L'] + points[2:])
+            path = parse_path(p, matrix=matrix, svgState=state)
             paths.append(path)
-            ## TODO: rectangle
+        elif tag == 'rect':
+            x = getFloat('x')
+            y = getFloat('y')
+            w = getFloat('width')
+            h = getFloat('height')
+            rx = getFloat('rx',default=None)
+            ry = getFloat('ry',default=None)
+            path = path_from_rect(x,y,w,h,rx,ry, matrix,state)
+            paths.append(path)
         elif tag == 'g' or tag == 'svg':
             for child in tree:
                 getPaths(paths, matrix, child, state, savedElements)
