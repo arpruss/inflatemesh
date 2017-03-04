@@ -432,7 +432,7 @@ def rgbFromColor(colorName):
         return SVG_COLORS[colorName]        
         
         
-def getPathsFromSVG(svg,yGrowsUp=True):
+def getPathsFromSVG(svg,yGrowsUp=True,includeText=False):
     def updateStateCommand(state,cmd,arg):
         if cmd == 'fill':
             state.fill = rgbFromColor(arg)
@@ -530,6 +530,10 @@ def getPathsFromSVG(svg,yGrowsUp=True):
         matrix = updateMatrix(tree,matrix)
         return updateState(tree,state,matrix),matrix
         
+    def parseText(tree, matrix, text):
+        # TODO!
+        return None
+        
     def getPaths(paths, matrix, tree, state, savedElements):
         def getFloat(attribute,default=0.):
             try:
@@ -608,6 +612,8 @@ def getPathsFromSVG(svg,yGrowsUp=True):
                 getPaths(paths, matrix, source, state, dict(savedElements))
             except KeyError:
                 pass
+        elif includeText and tag == 'text':
+            paths.append(parseText(tree, matrix, state))
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
@@ -642,6 +648,6 @@ def getPathsFromSVG(svg,yGrowsUp=True):
     return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
                 applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
-def getPathsFromSVGFile(filename,yGrowsUp=True):
-    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
+def getPathsFromSVGFile(filename,yGrowsUp=True,includeText=False):
+    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp,includeText=includeText)
     

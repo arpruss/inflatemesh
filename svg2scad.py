@@ -148,7 +148,7 @@ options:
         help(exitCode=1)
         sys.exit(2)
         
-    paths, lowerLeft, upperRight = parser.getPathsFromSVGFile(args[0])
+    paths, lowerLeft, upperRight = parser.getPathsFromSVGFile(args[0],includeText=False)
     
     if centerPage:
         offset = -0.5*(lowerLeft+upperRight)
