@@ -278,7 +278,7 @@ options:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "height=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
-                        "output=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
+                        "output=", "center-page", "xcenter-page=", "no-colors", "xcolors=", "noise=", "noise-exponent="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -319,6 +319,10 @@ options:
                 params.exponent = float(arg)
             elif opt == "--output":
                 outfile = arg
+            elif opt == "--noise":
+                params.noise = float(arg)
+            elif opt == "--noise-exponent":
+                params.noiseExponent = float(arg)
             elif opt == "--center-page":
                 centerPage = True
             elif opt == "--xcenter-page":
