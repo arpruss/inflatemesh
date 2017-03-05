@@ -184,7 +184,8 @@ class HexMeshData(MeshData):
 
 def diamondSquare(n, noiseMagnitude=lambda n:1./(n+1)**2):
     def r(n):
-        return uniform(0, noiseMagnitude(n))
+        m = noiseMagnitude(n)
+        return uniform(-m,m)
     size = int(2**n + 1)
     d = size - 1
     grid = tuple([0 for i in range(size)] for i in range(size))
