@@ -296,7 +296,7 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
         n = int(math.log(max(width,height))/math.log(2)+2)
         size = int(2**n+1)
         left,bottom,right,top = meshData.getCoordinateBounds()
-        noise = diamondSquare(n,noiseMagnitude = lambda n:1./(1+n)**inflationParams.noiseExponent)
+        noise = diamondSquare(n,noiseMagnitude = lambda n:1./(n+1)**inflationParams.noiseExponent if inflationParams.noiseExponent else 0.5**n)
         maxNoise = max(max(col) for col in noise)
         minNoise = min(min(col) for col in noise)
         if maxNoise == minNoise:
