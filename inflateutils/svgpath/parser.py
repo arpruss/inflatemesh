@@ -358,11 +358,11 @@ def parse_path(pathdef, current_pos=0j, matrix = None, svgState=None):
             arc = float(elements.pop())
             sweep = float(elements.pop())
             end = float(elements.pop()) + float(elements.pop()) * 1j
-
+           
             if not absolute:
                 end += current_pos
 
-            segments.append(path.Arc(scaler(current_pos), scaler(radius)-scaler(0j), rotation, arc, sweep, scaler(end)))
+            segments.append(path.Arc(current_pos, radius, rotation, arc, sweep, end, scaler))
             current_pos = end
 
     return segments
@@ -432,7 +432,7 @@ def rgbFromColor(colorName):
         return SVG_COLORS[colorName]        
         
         
-def getPathsFromSVG(svg,yGrowsUp=True,includeText=False):
+def getPathsFromSVG(svg,yGrowsUp=True):
     def updateStateCommand(state,cmd,arg):
         if cmd == 'fill':
             state.fill = rgbFromColor(arg)
@@ -530,10 +530,6 @@ def getPathsFromSVG(svg,yGrowsUp=True,includeText=False):
         matrix = updateMatrix(tree,matrix)
         return updateState(tree,state,matrix),matrix
         
-    def parseText(tree, matrix, text):
-        # TODO!
-        return None
-        
     def getPaths(paths, matrix, tree, state, savedElements):
         def getFloat(attribute,default=0.):
             try:
@@ -612,8 +608,6 @@ def getPathsFromSVG(svg,yGrowsUp=True,includeText=False):
                 getPaths(paths, matrix, source, state, dict(savedElements))
             except KeyError:
                 pass
-        elif includeText and tag == 'text':
-            paths.append(parseText(tree, matrix, state))
 
     def scale(width, height, viewBox, z):
         x = (z.real - viewBox[0]) / (viewBox[2] - viewBox[0]) * width
@@ -643,11 +637,9 @@ def getPathsFromSVG(svg,yGrowsUp=True,includeText=False):
     
     getPaths(paths, matrix, svg, path.SVGState(), {})
 
-    scaler = lambda z : applyMatrix(matrix, z)
-    
     return ( paths, applyMatrix(matrix, complex(viewBox[0], viewBox[1])), 
                 applyMatrix(matrix, complex(viewBox[2], viewBox[3])) )
 
-def getPathsFromSVGFile(filename,yGrowsUp=True,includeText=False):
-    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp,includeText=includeText)
+def getPathsFromSVGFile(filename,yGrowsUp=True):
+    return getPathsFromSVG(ET.parse(filename).getroot(),yGrowsUp=yGrowsUp)
     
