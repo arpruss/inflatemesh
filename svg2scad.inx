@@ -15,7 +15,7 @@
     <page name="scad" _gui-text="Settings ">
       <param name="tolerance" type="float" min="0.001" max="10.0" precision="3" _gui-text="Tolerance (0.001-10mm):" _gui-description="Precision when flatting Beziers (Default: 0.1)">0.1</param>
       <param name="height" type="float" min="0" max="1000000.0" precision="3" _gui-text="Height (mm):" _gui-description="Height of ribbons or polygons (Default: 10); use 0 for 2D">10</param>
-      <param name="width" type="float" min="0.001" max="1000000.0" precision="3" _gui-text="Width (mm):" _gui-description="Width of ribbons (Default: 1)">1</param>
+      <param name="width" type="float" min="0" max="1000000.0" precision="3" _gui-text="Width (mm):" _gui-description="Ribbon width override (Default: 0=off)">0</param>
       <param name="mode" type="enum" _gui-text="Extraction mode:" _gui-description="Choose what to put in the SCAD file.">
         <item value="points">point lists only</item>
         <item value="ribbons">ribbons and point lists</item>

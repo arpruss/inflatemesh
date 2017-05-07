@@ -56,6 +56,7 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colo
                 else:
                     color = path.svgState.fill
         polygon = PolygonData(color)
+        polygon.strokeWidth = path.svgState.strokeWidth;
         polygons.append(polygon)
         for j,subpath in enumerate(path.breakup()):
             points = [subpath[0].start+offset]
@@ -77,7 +78,7 @@ if __name__ == '__main__':
     mode = "points"
     baseName = "svg"
     tolerance = 0.1
-    width = 1
+    width = 0
     height = 10
     colors = True
     centerPage = False
@@ -89,7 +90,7 @@ options:
 --tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
 --ribbon:       make ribbons out of paths
 --polygons:     make polygons out of paths (requires manual adjustment of holes)
---width:        ribbon width (thickness)
+--width:        ribbon width override
 --height:       ribbon or polygon height in millimeters; if zero, they're two-dimensional (default: 10)
 --no-colors:    omit colors from SVG file (default: include colors)
 --name=abc:     make all the OpenSCAD variables/module names contain abc (e.g., center_abc) (default: svg)
@@ -160,7 +161,7 @@ options:
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
         scad += "height_%s = %.9f;\n"  % (baseName, height)
-    if mode[0] == "r":
+    if mode[0] == "r" and width:
         scad += "width_%s = %.9f;\n" % (baseName, width)
         
     if len(scad):
@@ -175,6 +176,7 @@ options:
     for i,polygon in enumerate(polygons):
         scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.getCenter().real, polygon.getCenter().imag)
         scad += "size_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.bounds[2]-polygon.bounds[0],polygon.bounds[3]-polygon.bounds[1])
+        scad += "stroke_width_%s = %.9f;\n" % polygon.strokeWidth
         if colors:
             scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
         
@@ -185,7 +187,7 @@ options:
         scad += "\n"
 
     if mode[0] == "r":
-        scad += """module ribbon(points, thickness=width_%s) {
+        scad += """module ribbon(points, thickness=1) {
     p = points;
     
     union() {
@@ -198,8 +200,7 @@ options:
     }
 }
 
-""" % (baseName,)
-
+""" 
         objectName = "ribbon"
         
         for i,polygon in enumerate(polygons):
@@ -211,7 +212,7 @@ options:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
             for j in range(len(polygon.pointLists)):
-                scad += "  ribbon(points_%s, thickness=width_%s);\n" % (subpathName(i,j), baseName)
+                scad += "  ribbon(points_%s, thickness=%s);\n" % (subpathName(i,j), ("width_"+baseName) if width else ("stroke_width_"+polyName(i))
             scad += " }\n}\n\n"
     elif mode.startswith("pol"):
     
