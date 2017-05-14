@@ -30,8 +30,8 @@ class PolygonData(object):
     def updateBounds(self,z):
         self.bounds[0] = min(self.bounds[0], z.real)
         self.bounds[1] = min(self.bounds[1], z.imag)
-        self.bounds[2] = max(self.bounds[0], z.real)
-        self.bounds[3] = max(self.bounds[1], z.imag)
+        self.bounds[2] = max(self.bounds[2], z.real)
+        self.bounds[3] = max(self.bounds[3], z.imag)
 
     def getCenter(self):
         return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
@@ -65,7 +65,7 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colo
                 points.append(line.end+offset)
                 polygon.updateBounds(points[-1])
             if subpath.closed and points[0] != points[-1]:
-                points.append(points[0]+offset)
+                points.append(points[0])
             polygon.pointLists.append(points)
         for points in polygon.pointLists:
             for j in range(len(points)):
@@ -176,7 +176,7 @@ options:
     for i,polygon in enumerate(polygons):
         scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.getCenter().real, polygon.getCenter().imag)
         scad += "size_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.bounds[2]-polygon.bounds[0],polygon.bounds[3]-polygon.bounds[1])
-        scad += "stroke_width_%s = %.9f;\n" % polygon.strokeWidth
+        scad += "stroke_width_%s = %.9f;\n" % (polyName(i), polygon.strokeWidth)
         if colors:
             scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
         
@@ -212,7 +212,7 @@ options:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
             for j in range(len(polygon.pointLists)):
-                scad += "  ribbon(points_%s, thickness=%s);\n" % (subpathName(i,j), ("width_"+baseName) if width else ("stroke_width_"+polyName(i))
+                scad += "  ribbon(points_%s, thickness=%s);\n" % (subpathName(i,j), ("width_"+baseName) if width else ("stroke_width_"+polyName(i)))
             scad += " }\n}\n\n"
     elif mode.startswith("pol"):
     
