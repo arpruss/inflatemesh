@@ -1,5 +1,5 @@
 from struct import pack
-from vector import *
+from .vector import *
 from numbers import Number 
 import os
 import sys

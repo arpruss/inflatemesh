@@ -1,6 +1,6 @@
 from __future__ import division
-from vector import *
-from exportmesh import *
+from .vector import *
+from .exportmesh import *
 from random import uniform
 import itertools
 import os.path
