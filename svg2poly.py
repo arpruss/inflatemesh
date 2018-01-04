@@ -350,6 +350,7 @@ options:
             scad += "module %s_%s() {\n " % (objectName,polyName(i),)
             if colors:
                 scad += "color(color_%s) " % (polyName(i),)
+                scad += "render(convexity=4) "
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
