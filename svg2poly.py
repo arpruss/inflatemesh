@@ -3,40 +3,11 @@ import inflateutils.svgpath.shader as shader
 import inflateutils.svgpath.parser as parser
 import sys
 import getopt
+import cmath
 from inflateutils.exportmesh import *
+from random import sample
 
 quiet = False
-
-def comparison(a,b):
-    return 1 if a>b else (-1 if a<b else 0)
-        
-def safeSorted(data,comparison):
-    """
-    A simpleminded recursive merge sort that will work even if the comparison function fails to be a partial order.
-    Makes (shallow) copies of the data, which uses more memory than is absolutely necessary. In the intended application,
-    the comparison function is very expensive but the number of data points is small.
-    """
-    
-    n = len(data)
-    if n <= 1:
-        return list(data)
-    d1 = safeSorted(data[:n//2],comparison)
-    d2 = safeSorted(data[n//2:],comparison)
-    i1 = 0
-    i2 = 0
-    out = []
-    while i1 < len(d1) and i2 < len(d2):
-        if compare(d1[i1], d2[i2], comparison) < 0:
-            out.append(d1[i1])
-            i1 += 1
-        else:
-            out.append(d2[i2])
-            i2 += 1
-    if i1 < len(d1):
-        out += d1[i1:]
-    elif i2 < len(d2):
-        out += d2[i2:]
-    return out
 
 def closed(path):
     return path[-1] == path[0]
@@ -68,8 +39,8 @@ def inside(z, path):
             xIntercept = p2.real - reciprocalSlope * p2.imag
             if xIntercept == 0:
                 return False # on boundary
-            if xIntercept > 0:
-                if p1.imag < p2.imag:
+            if xIntercept > 0 and p1.imag * p2.imag < 0:
+                if p1.imag < 0:
                     s += 1
                 else:
                     s -= 1
@@ -78,7 +49,7 @@ def inside(z, path):
     except OverflowError:
         return False
     
-def nestedPaths(path1, path2):
+def nestedPaths(path1, path2, pointsToCheck=3):
     if not closed(path2):
         return False
     k = min(pointsToCheck, len(path1))
@@ -87,29 +58,20 @@ def nestedPaths(path1, path2):
             return True
     return False
     
-def fixPath(path):
-    out = [complex(point[0],point[1]) for point in path]
-    if out[0] != out[-1] and abs(out[0]-out[-1]) <= tolerance:
-        out.append(out[0]) 
-    return out
-    
-def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
+def comparePaths(path1,path2,pointsToCheck=3):
     """
+    open paths before closed paths
     outer paths come before inner ones
-    open ones before closed paths
     otherwise, top to bottom bounds, left to right
     """
     
-    path1 = fixPath(path1)
-    path2 = fixPath(path2)
-    
-    if nestedPaths(path1, path2):
-        return 1
-    elif nestedPaths(path2, path1):
-        return -1
-    elif closed(path1) and not closed(path2):
+    if closed(path1) and not closed(path2):
         return 1
     elif closed(path2) and not closed(path1):
+        return -1
+    if nestedPaths(path1, path2, pointsToCheck=pointsToCheck):
+        return 1
+    elif nestedPaths(path2, path1, pointsToCheck=pointsToCheck):
         return -1
     y1 = max(p.imag for p in path1)
     y2 = max(p.imag for p in path2)
@@ -118,17 +80,27 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
     else:
         return comparison(y1,y2)
 
-def orderedPaths(sortedPaths):
+def getLevels(paths):
     level = []
-    while len(sortedPaths):
-        path = sortedPaths[0]
+    empty = True
+    for i,path in enumerate(paths):
+        if path is None:
+            continue
+        empty = False
+        outer = True
         if closed(path):
-            for p in level:
-                if inside(path, p):
-                    return [level] + orderedPaths(sortedPaths)
-        level.append(path)
-        sortedPaths.pop(0)
-    return [level]    
+            for j in range(len(paths)):
+                if j != i and paths[j] is not None and nestedPaths(path, paths[j]):
+                    outer = False
+                    break
+        if outer:
+            level.append(path)
+            paths[i] = None
+
+    if empty:
+        return []
+    else:
+        return [level] + getLevels(paths)
         
 def message(string):
     if not quiet:
@@ -160,7 +132,7 @@ class PolygonData(object):
         return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
 
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False, levels=False):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
@@ -193,8 +165,41 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colo
         for points in polygon.pointLists:
             for j in range(len(points)):
                 points[j] -= polygon.getCenter()
-            
+                
+        if levels:
+            polygon.levels = getLevels(polygon.pointLists)
+            polygon.pointLists = flattenLevels(polygon.levels)
+
     return polygons
+    
+def toNestedPolygons(levels, name, i=0, indent=4):
+    def spaces():
+        return ' '*indent
+    out = ""
+    if len(levels)>1:
+        out += spaces() + "difference() {\n"
+        indent += 2
+    if len(levels[0])>1:
+        out += spaces() + "union() {\n"
+        indent += 2
+    for poly in levels[0]:
+        if closed(poly):
+            out += spaces() + "polygon(points=%s);\n" % name(i)
+        i += 1
+    if len(levels[0])>1:
+        indent -= 2
+        out += spaces() + "}\n"
+    if len(levels)>1:
+        out += toNestedPolygons(levels[1:], name, i=i, indent=indent)
+        indent -= 2
+        out += spaces() + "}\n"
+    return out
+    
+def flattenLevels(levels):
+    out = []
+    for level in levels:
+        out += level
+    return out
     
 if __name__ == '__main__':
     outfile = None
@@ -279,7 +284,7 @@ options:
     else:
         offset = 0
         
-    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')))
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')), levels=(mode.startswith('pol')))
     
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
@@ -348,9 +353,7 @@ options:
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
-            ##
-            for j in range(len(polygon.pointLists)):
-                scad += "  polygon(points=points_%s);\n" % subpathName(i,j)  
+            scad += toNestedPolygons(polygon.levels, lambda j : "points_" + subpathName(i,j))
             scad += " }\n}\n\n"
             
     else:

@@ -3,10 +3,105 @@ import inflateutils.svgpath.shader as shader
 import inflateutils.svgpath.parser as parser
 import sys
 import getopt
+import cmath
 from inflateutils.exportmesh import *
+from random import sample
 
 quiet = False
 
+def closed(path):
+    return path[-1] == path[0]
+    
+def inside(z, path):
+    for p in path:
+        if p == z:
+            return False
+    try:
+        phases = sorted((cmath.phase(p-z) for p in path))
+        # make a ray that is relatively far away from any points
+        if len(phases) == 1:
+            # should not happen
+            bestPhase = phases[0] + math.pi
+        else:    
+            bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))[1]
+            bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
+        ray = cmath.rect(1., bestPhase)
+        rotatedPath = tuple((p-z) / ray for p in path)
+        # now we just need to check shiftedPath's intersection with the positive real line
+        s = 0
+        for i,p2 in enumerate(rotatedPath):
+            p1 = rotatedPath[i-1]
+            if p1.imag == p2.imag:
+                # horizontal lines can't intersect positive real line once phase selection was done
+                continue
+                # (1/m)y + xIntercept = x
+            reciprocalSlope = (p2.real-p1.real)/(p2.imag-p1.imag)
+            xIntercept = p2.real - reciprocalSlope * p2.imag
+            if xIntercept == 0:
+                return False # on boundary
+            if xIntercept > 0 and p1.imag * p2.imag < 0:
+                if p1.imag < 0:
+                    s += 1
+                else:
+                    s -= 1
+        return s != 0
+            
+    except OverflowError:
+        return False
+    
+def nestedPaths(path1, path2, pointsToCheck=3):
+    if not closed(path2):
+        return False
+    k = min(pointsToCheck, len(path1))
+    for point in sample(path1, k):
+        if inside(point, path2):
+            return True
+    return False
+    
+def comparePaths(path1,path2,pointsToCheck=3):
+    """
+    open paths before closed paths
+    outer paths come before inner ones
+    otherwise, top to bottom bounds, left to right
+    """
+    
+    if closed(path1) and not closed(path2):
+        return 1
+    elif closed(path2) and not closed(path1):
+        return -1
+    if nestedPaths(path1, path2, pointsToCheck=pointsToCheck):
+        return 1
+    elif nestedPaths(path2, path1, pointsToCheck=pointsToCheck):
+        return -1
+    y1 = max(p.imag for p in path1)
+    y2 = max(p.imag for p in path2)
+    if y1 == y2:
+        return comparison(min(p.real for p in path1),min(p.real for p in path2))
+    else:
+        return comparison(y1,y2)
+
+def getLevels(paths):
+    level = []
+    empty = True
+    for i,path in enumerate(paths):
+        if path is None:
+            continue
+        empty = False
+        outer = True
+        if closed(path):
+            for j in range(len(paths)):
+                if j != i and paths[j] is not None and nestedPaths(path, paths[j]):
+                    outer = False
+                    break
+        if outer:
+            level.append(path)
+            paths[i] = None
+
+    if empty:
+        return []
+    else:
+        return [level] + getLevels(paths)
+        
 def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
@@ -37,7 +132,7 @@ class PolygonData(object):
         return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
 
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False, levels=False):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
@@ -70,8 +165,41 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colo
         for points in polygon.pointLists:
             for j in range(len(points)):
                 points[j] -= polygon.getCenter()
-            
+                
+        if levels:
+            polygon.levels = getLevels(polygon.pointLists)
+            polygon.pointLists = flattenLevels(polygon.levels)
+
     return polygons
+    
+def toNestedPolygons(levels, name, i=0, indent=4):
+    def spaces():
+        return ' '*indent
+    out = ""
+    if len(levels)>1:
+        out += spaces() + "difference() {\n"
+        indent += 2
+    if len(levels[0])>1:
+        out += spaces() + "union() {\n"
+        indent += 2
+    for poly in levels[0]:
+        if closed(poly):
+            out += spaces() + "polygon(points=%s);\n" % name(i)
+        i += 1
+    if len(levels[0])>1:
+        indent -= 2
+        out += spaces() + "}\n"
+    if len(levels)>1:
+        out += toNestedPolygons(levels[1:], name, i=i, indent=indent)
+        indent -= 2
+        out += spaces() + "}\n"
+    return out
+    
+def flattenLevels(levels):
+    out = []
+    for level in levels:
+        out += level
+    return out
     
 if __name__ == '__main__':
     outfile = None
@@ -156,7 +284,7 @@ options:
     else:
         offset = 0
         
-    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')))
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')), levels=(mode.startswith('pol')))
     
     scad = ""
     if (mode.startswith("pol") or mode[0] == "r") and height > 0:
@@ -225,8 +353,7 @@ options:
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
-            for j in range(len(polygon.pointLists)):
-                scad += "  polygon(points=points_%s);\n" % subpathName(i,j)  
+            scad += toNestedPolygons(polygon.levels, lambda j : "points_" + subpathName(i,j))
             scad += " }\n}\n\n"
             
     else:
