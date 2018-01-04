@@ -10,19 +10,7 @@ quiet = False
 def comparison(a,b):
     return 1 if a>b else (-1 if a<b else 0)
         
-def compare(a,b,comparison,comparisonCache):
-    if (a,b) in comparisonCache:
-        return -1
-    elif (b,a) in comparisonCache:
-        return 1
-    else:
-        d = comparison(a,b)
-        if d < 0:
-            comparisonCache.add((a,b))
-        else:
-            comparisonCache.add((b,a))
-
-def safeSorted(data,comparison,comparisonCache=set()):
+def safeSorted(data,comparison):
     """
     A simpleminded recursive merge sort that will work even if the comparison function fails to be a partial order.
     Makes (shallow) copies of the data, which uses more memory than is absolutely necessary. In the intended application,
@@ -32,13 +20,13 @@ def safeSorted(data,comparison,comparisonCache=set()):
     n = len(data)
     if n <= 1:
         return list(data)
-    d1 = safeSorted(data[:n//2],comparison,comparisonCache=comparisonCache)
-    d2 = safeSorted(data[n//2:],comparison,comparisonCache=comparisonCache)
+    d1 = safeSorted(data[:n//2],comparison)
+    d2 = safeSorted(data[n//2:],comparison)
     i1 = 0
     i2 = 0
     out = []
     while i1 < len(d1) and i2 < len(d2):
-        if compare(d1[i1], d2[i2], comparison, comparisonCache) < 0:
+        if compare(d1[i1], d2[i2], comparison) < 0:
             out.append(d1[i1])
             i1 += 1
         else:
@@ -50,6 +38,61 @@ def safeSorted(data,comparison,comparisonCache=set()):
         out += d2[i2:]
     return out
 
+def closed(path):
+    return path[-1] == path[0]
+    
+def inside(z, path):
+    for p in path:
+        if p == z:
+            return False
+    try:
+        phases = sorted((cmath.phase(p-z) for p in path))
+        # make a ray that is relatively far away from any points
+        if len(phases) == 1:
+            # should not happen
+            bestPhase = phases[0] + math.pi
+        else:    
+            bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))[1]
+            bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
+        ray = cmath.rect(1., bestPhase)
+        rotatedPath = tuple((p-z) / ray for p in path)
+        # now we just need to check shiftedPath's intersection with the positive real line
+        s = 0
+        for i,p2 in enumerate(rotatedPath):
+            p1 = rotatedPath[i-1]
+            if p1.imag == p2.imag:
+                # horizontal lines can't intersect positive real line once phase selection was done
+                continue
+                # (1/m)y + xIntercept = x
+            reciprocalSlope = (p2.real-p1.real)/(p2.imag-p1.imag)
+            xIntercept = p2.real - reciprocalSlope * p2.imag
+            if xIntercept == 0:
+                return False # on boundary
+            if xIntercept > 0:
+                if p1.imag < p2.imag:
+                    s += 1
+                else:
+                    s -= 1
+        return s != 0
+            
+    except OverflowError:
+        return False
+    
+def nestedPaths(path1, path2):
+    if not closed(path2):
+        return False
+    k = min(pointsToCheck, len(path1))
+    for point in sample(path1, k):
+        if inside(point, path2):
+            return True
+    return False
+    
+def fixPath(path):
+    out = [complex(point[0],point[1]) for point in path]
+    if out[0] != out[-1] and abs(out[0]-out[-1]) <= tolerance:
+        out.append(out[0]) 
+    return out
+    
 def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
     """
     outer paths come before inner ones
@@ -57,61 +100,6 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
     otherwise, top to bottom bounds, left to right
     """
     
-    def fixPath(path):
-        out = [complex(point[0],point[1]) for point in path]
-        if out[0] != out[-1] and abs(out[0]-out[-1]) <= tolerance:
-            out.append(out[0]) 
-        return out
-        
-    def closed(path):
-        return path[-1] == path[0]
-        
-    def inside(z, path):
-        for p in path:
-            if p == z:
-                return False
-        try:
-            phases = sorted((cmath.phase(p-z) for p in path))
-            # make a ray that is relatively far away from any points
-            if len(phases) == 1:
-                # should not happen
-                bestPhase = phases[0] + math.pi
-            else:    
-                bestIndex = max( (phases[i+1]-phases[i],i) for i in range(len(phases)-1))[1]
-                bestPhase = (phases[bestIndex+1]+phases[bestIndex])/2.
-            ray = cmath.rect(1., bestPhase)
-            rotatedPath = tuple((p-z) / ray for p in path)
-            # now we just need to check shiftedPath's intersection with the positive real line
-            s = 0
-            for i,p2 in enumerate(rotatedPath):
-                p1 = rotatedPath[i-1]
-                if p1.imag == p2.imag:
-                    # horizontal lines can't intersect positive real line once phase selection was done
-                    continue
-                    # (1/m)y + xIntercept = x
-                reciprocalSlope = (p2.real-p1.real)/(p2.imag-p1.imag)
-                xIntercept = p2.real - reciprocalSlope * p2.imag
-                if xIntercept == 0:
-                    return False # on boundary
-                if xIntercept > 0:
-                    if p1.imag < p2.imag:
-                        s += 1
-                    else:
-                        s -= 1
-            return s != 0
-                
-        except OverflowError:
-            return False
-        
-    def nestedPaths(path1, path2):
-        if not closed(path2):
-            return False
-        k = min(pointsToCheck, len(path1))
-        for point in sample(path1, k):
-            if inside(point, path2):
-                return True
-        return False
-        
     path1 = fixPath(path1)
     path2 = fixPath(path2)
     
@@ -130,6 +118,18 @@ def comparePaths(path1,path2,tolerance=0.05,pointsToCheck=3):
     else:
         return comparison(y1,y2)
 
+def orderedPaths(sortedPaths):
+    level = []
+    while len(sortedPaths):
+        path = sortedPaths[0]
+        if closed(path):
+            for p in level:
+                if inside(path, p):
+                    return [level] + orderedPaths(sortedPaths)
+        level.append(path)
+        sortedPaths.pop(0)
+    return [level]    
+        
 def message(string):
     if not quiet:
         sys.stderr.write(string + "\n")
