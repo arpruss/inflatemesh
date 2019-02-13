@@ -81,11 +81,7 @@ class Segment(object):
     def getApproximatePoints(self, error=0.001, max_depth=32):
         points = approximate(self, 0., 1., self.point(0.), self.point(1.), error, 0, max_depth)
         return points
-        
-    def translate(self, delta):
-        self.start += delta
-        self.end += delta
-        
+
 class Line(Segment):
     def __init__(self, start, end):
         super(Line, self).__init__(start,end)
@@ -115,7 +111,7 @@ class Line(Segment):
         return self.start + distance * pos
 
     def length(self, error=None, min_depth=None):
-        distance = self.end - self.start
+        distance = (self.end - self.start)
         return sqrt(distance.real ** 2 + distance.imag ** 2)
 
 
@@ -124,11 +120,6 @@ class CubicBezier(Segment):
         super(CubicBezier, self).__init__(start,end)
         self.control1 = control1
         self.control2 = control2
-        
-    def translate(self, delta):
-        super(CubeBezier, self).translate(delta)
-        self.control1 += delta
-        self.control2 += delta
 
     def __repr__(self):
         return 'CubicBezier(start=%s, control1=%s, control2=%s, end=%s)' % (
@@ -175,11 +166,6 @@ class QuadraticBezier(Segment):
     def __init__(self, start, control, end):
         super(QuadraticBezier, self).__init__(start,end)
         self.control = control
-
-    def translate(self, delta):
-        super(QuadraticBezier, self).translate(delta)
-        self.control1 += delta
-        self.control2 += delta
 
     def __repr__(self):
         return 'QuadraticBezier(start=%s, control=%s, end=%s)' % (
@@ -258,11 +244,6 @@ class Arc(Segment):
 
         self._parameterize()
         
-    def translate(self, delta):
-        super(Arc, self).translate(delta)
-        self.start0 += scaler(delta)-scaler(0)
-        self.end0 += scaler(delta)-scaler(0)
-
     def __repr__(self):
         return 'Arc(start0=%s, radius=%s, rotation=%s, arc=%s, sweep=%s, end0=%s, scaler=%s)' % (
                self.start0, self.radius, self.rotation, self.arc, self.sweep, self.end0, self.scaler)
@@ -400,10 +381,6 @@ class Path(MutableSequence):
             self.svgState = kw['svgState']
         else:
             self.svgState = SVGState()
-            
-    def translate(self, delta):
-        for segment in self._segments:
-            segment.translate(delta)
 
     def __getitem__(self, index):
         return self._segments[index]

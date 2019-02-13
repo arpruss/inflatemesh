@@ -53,7 +53,9 @@ def nestedPaths(path1, path2, pointsToCheck=3):
     if not closed(path2):
         return False
     k = min(pointsToCheck, len(path1))
+    print("//"+str(path2))
     for point in sample(path1, k):
+        print("//"+str(point))
         if inside(point, path2):
             return True
     return False
