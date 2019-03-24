@@ -16,11 +16,8 @@
       <param name="tolerance" type="float" min="0.001" max="10.0" precision="3" _gui-text="Tolerance (0.001-10mm):" _gui-description="Precision when flatting Beziers (Default: 0.1)">0.1</param>
       <param name="height" type="float" min="0" max="1000000.0" precision="3" _gui-text="Height (mm):" _gui-description="Height of ribbons or polygons (Default: 10); use 0 for 2D">10</param>
       <param name="width" type="float" min="0" max="1000000.0" precision="3" _gui-text="Width (mm):" _gui-description="Ribbon width override (Default: 0=off)">0</param>
-      <param name="mode" type="enum" _gui-text="Extraction mode:" _gui-description="Choose what to put in the SCAD file.">
-        <item value="points">point lists only</item>
-        <item value="ribbons">ribbons and point lists</item>
-        <item value="polygons">polygons and point lists</item>
-      </param>
+      <param name="xribbons" type="boolean" _gui-text="Generate ribbons for edges" _gui-description="This draws ribbons where there are colored edges.">1</param>
+      <param name="xpolygons" type="boolean" _gui-text="Generate polygons for fill" _gui-description="This draws polygons where there is fill.">1</param>
       <param name="xcenter-page" type="boolean" _gui-text="Center page at (0,0,0)" _gui-description="This centers the center of the Inkscape page at the origin in the OpenSCAD file.">1</param>
       <param name="xcolors" type="boolean" _gui-text="Include colors" _gui-description="This includes the colors from the Inkscape file.">1</param>
       <param name="name" type="string" _gui-text="OpenSCAD object identifier" _gui-description="All the variables will be tagged with what you put here.">svg</param>

@@ -117,9 +117,10 @@ def sortedApproximatePaths(paths,error=0.1):
     return sorted(paths, key=key)
 
 class PolygonData(object):
-    def __init__(self,color):
+    def __init__(self,color,fillColor):
         self.bounds = [float("inf"),float("inf"),float("-inf"),float("-inf")]
         self.color = color
+        self.fillColor = fillColor
         self.pointLists = []
         
     def updateBounds(self,z):
@@ -132,25 +133,20 @@ class PolygonData(object):
         return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
 
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, colorFromFill=False, levels=False):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, levels=False):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
     
     for i,path in enumerate(paths):
         color = None
+        fillColor = None
         if colors:
-            if colorFromFill:
-                if path.svgState.fill is not None:
-                    color = path.svgState.fill
-                else:
-                    color = path.svgState.stroke
-            else:
-                if path.svgState.stroke is not None:
-                    color = path.svgState.stroke
-                else:
-                    color = path.svgState.fill
-        polygon = PolygonData(color)
+            if path.svgState.fill is not None:
+                fillColor = path.svgState.fill
+            if path.svgState.stroke is not None:
+                color = path.svgState.stroke
+        polygon = PolygonData(color,fillColor)
         polygon.strokeWidth = path.svgState.strokeWidth;
         polygons.append(polygon)
         for j,subpath in enumerate(path.breakup()):
@@ -203,7 +199,8 @@ def flattenLevels(levels):
     
 if __name__ == '__main__':
     outfile = None
-    mode = "points"
+    doRibbons = False
+    doPolygons = False
     baseName = "svg"
     tolerance = 0.1
     width = 0
@@ -216,8 +213,8 @@ if __name__ == '__main__':
 options:
 --help:         this message        
 --tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
---ribbon:       make ribbons out of paths
---polygons:     make polygons out of paths (requires manual adjustment of holes)
+--ribbons:      make ribbons out of outlined paths
+--polygons:     make polygons out of shaded paths
 --width:        ribbon width override
 --height:       ribbon or polygon height in millimeters; if zero, they're two-dimensional (default: 10)
 --no-colors:    omit colors from SVG file (default: include colors)
@@ -233,7 +230,7 @@ options:
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
-                        ["mode=", "help", "tolerance=", "ribbon", "polygons", "points", "width=", 
+                        ["help", "tolerance=", "ribbons", "polygons", "width=", "xpolygons=", "xribbons=",
                         "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
 
         if len(args) == 0:
@@ -253,12 +250,10 @@ options:
                 height = float(arg)
             elif opt == '--name':
                 baseName = arg
-            elif opt == "--ribbon":
-                mode = "ribbon"
-            elif opt == "--polygons":
-                mode = "polygons"
-            elif opt == "--points":
-                mode = "points"
+            elif opt == "--ribbons" or opt == "--xribbons":
+                doRibbons = True
+            elif opt == "--polygons" or opt == "--xpolygons":
+                doPolygons = True
             elif opt == "--center-page":
                 centerPage = True
             elif opt == "--xcenter-page":
@@ -267,8 +262,6 @@ options:
                 colors = (arg == "true" or arg == "1")
             elif opt == "--no-colors":
                 colors = False
-            elif opt == "--mode":
-                mode = arg.strip().lower()
                 
             i += 1
                 
@@ -284,12 +277,13 @@ options:
     else:
         offset = 0
         
-    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, colorFromFill=(mode.startswith('pol')), levels=(mode.startswith('pol')))
+    polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, 
+                    levels=doPolygons)
     
     scad = ""
-    if (mode.startswith("pol") or mode[0] == "r") and height > 0:
+    if (doPolygons or doRibbons) and height > 0:
         scad += "height_%s = %.9f;\n"  % (baseName, height)
-    if mode[0] == "r" and width:
+    if doRibbons and width:
         scad += "width_%s = %.9f;\n" % (baseName, width)
         
     if len(scad):
@@ -307,6 +301,7 @@ options:
         scad += "stroke_width_%s = %.9f;\n" % (polyName(i), polygon.strokeWidth)
         if colors:
             scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
+            scad += "fillcolor_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
         
     for i,polygon in enumerate(polygons):
         scad += "// paths for %s\n" % polyName(i)
@@ -314,7 +309,9 @@ options:
             scad += "points_" + subpathName(i,j) + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
         scad += "\n"
 
-    if mode[0] == "r":
+    objectNames = []
+        
+    if doRibbons:
         scad += """module ribbon(points, thickness=1) {
     p = points;
     
@@ -329,10 +326,10 @@ options:
 }
 
 """ 
-        objectName = "ribbon"
+        objectNames.append("ribbon")
         
         for i,polygon in enumerate(polygons):
-            scad += "module %s_%s() {\n " % (objectName,polyName(i),)
+            scad += "module ribbon_%s() {\n " % polyName(i)
             if colors:
                 scad += "color(color_%s) " % (polyName(i),)
                 
@@ -342,14 +339,14 @@ options:
             for j in range(len(polygon.pointLists)):
                 scad += "  ribbon(points_%s, thickness=%s);\n" % (subpathName(i,j), ("width_"+baseName) if width else ("stroke_width_"+polyName(i)))
             scad += " }\n}\n\n"
-    elif mode.startswith("pol"):
-    
-        objectName = "polygon"
+
+    if doPolygons:    
+        objectNames.append("polygon")
     
         for i,polygon in enumerate(polygons):
-            scad += "module %s_%s() {\n " % (objectName,polyName(i),)
+            scad += "module polygon_%s() {\n " % polyName(i)
             if colors:
-                scad += "color(color_%s) " % (polyName(i),)
+                scad += "color(fillcolor_%s) " % (polyName(i),)
             scad += "render(convexity=4) "
             if height > 0:
                 scad += "linear_extrude(height=height_%s) " % (baseName,)
@@ -357,10 +354,7 @@ options:
             scad += toNestedPolygons(polygon.levels, lambda j : "points_" + subpathName(i,j))
             scad += " }\n}\n\n"
             
-    else:
-        objectName = None
-        
-    if objectName is not None:
+    for objectName in objectNames:
         for i in range(len(polygons)):
             scad += "translate(center_%s) %s_%s();\n" % (polyName(i), objectName, polyName(i))
             
