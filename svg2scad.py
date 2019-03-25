@@ -359,7 +359,7 @@ options:
             
     for objectName in objectNames:
         for i in range(len(polygons)):
-            c = ""
+            c = "" if not colors else "//"
             if colors and objectName == 'polygon' and polygons[i].fillColor:
                 c = "color(fillcolor_%s) " % polyName(i)
             elif colors and objectName == 'ribbon' and polygons[i].color:
