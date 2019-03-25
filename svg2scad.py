@@ -250,10 +250,14 @@ options:
                 height = float(arg)
             elif opt == '--name':
                 baseName = arg
-            elif opt == "--ribbons" or opt == "--xribbons":
+            elif opt == "--ribbons":
                 doRibbons = True
-            elif opt == "--polygons" or opt == "--xpolygons":
+            elif opt == "--xribbons":
+                doRibbons = (arg == "true" or arg == "1")
+            elif opt == "--polygons":
                 doPolygons = True
+            elif opt == "--xpolygons":
+                doPolygons = (arg == "true" or arg == "1")
             elif opt == "--center-page":
                 centerPage = True
             elif opt == "--xcenter-page":
@@ -281,9 +285,11 @@ options:
                     levels=doPolygons)
     
     scad = ""
-    if (doPolygons or doRibbons) and height > 0:
-        scad += "height_%s = %.9f;\n"  % (baseName, height)
-    if doRibbons and width:
+
+    if height > 0:
+        scad += "height_%s = %.9f;\n" % (baseName, height)
+        
+    if width > 0:
         scad += "width_%s = %.9f;\n" % (baseName, width)
         
     if len(scad):
@@ -329,34 +335,35 @@ options:
         objectNames.append("ribbon")
         
         for i,polygon in enumerate(polygons):
-            scad += "module ribbon_%s() {\n " % polyName(i)
-            if colors:
-                scad += "color(color_%s) " % (polyName(i),)
-                
-            if height > 0:
-                scad += "linear_extrude(height=height_%s) " % (baseName,)
-            scad += "{\n"
+            scad += "module ribbon_%s(width=%s) {\n" % (polyName(i),("width_"+baseName) if width else ("stroke_width_"+polyName(i)))
             for j in range(len(polygon.pointLists)):
-                scad += "  ribbon(points_%s, thickness=%s);\n" % (subpathName(i,j), ("width_"+baseName) if width else ("stroke_width_"+polyName(i)))
-            scad += " }\n}\n\n"
+                scad += "  ribbon(points_%s, thickness=width);\n" % subpathName(i,j)
+            scad += "}\n\n"
 
     if doPolygons:    
         objectNames.append("polygon")
     
         for i,polygon in enumerate(polygons):
             scad += "module polygon_%s() {\n " % polyName(i)
-            if colors:
-                scad += "color(fillcolor_%s) " % (polyName(i),)
             scad += "render(convexity=4) "
-            if height > 0:
-                scad += "linear_extrude(height=height_%s) " % (baseName,)
             scad += "{\n"
             scad += toNestedPolygons(polygon.levels, lambda j : "points_" + subpathName(i,j))
             scad += " }\n}\n\n"
             
+    if height > 0:
+        extrude = "linear_extrude(height=height_%s) " % baseName
+    else:
+        extrude = ""
+            
     for objectName in objectNames:
         for i in range(len(polygons)):
-            scad += "translate(center_%s) %s_%s();\n" % (polyName(i), objectName, polyName(i))
+            c = ""
+            if colors and objectName == 'polygon' and polygons[i].fillColor:
+                c = "color(fillcolor_%s) " % polyName(i)
+            elif colors and objectName == 'ribbon' and polygons[i].color:
+                c = "color(color_%s) " % polyName(i)
+                
+            scad += c + extrude + ("translate(center_%s) %s_%s();\n" % (polyName(i), objectName, polyName(i)))
             
     if outfile:
         with open(outfile, "w") as f: f.write(scad)
