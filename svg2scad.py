@@ -83,7 +83,9 @@ def comparePaths(path1,path2,pointsToCheck=3):
 def getLevels(paths):
     level = []
     empty = True
-    for i,path in enumerate(paths):
+    nextPaths = paths[:]
+    for i in range(len(paths)):
+        path = paths[i]
         if path is None:
             continue
         empty = False
@@ -95,12 +97,12 @@ def getLevels(paths):
                     break
         if outer:
             level.append(path)
-            paths[i] = None
+            nextPaths[i] = None
 
     if empty:
         return []
     else:
-        return [level] + getLevels(paths)
+        return [level] + getLevels(nextPaths)
         
 def message(string):
     if not quiet:
