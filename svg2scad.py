@@ -359,7 +359,7 @@ options:
     scad = ""
     
     if cpMode[0] != 'n':
-        scad += "use <bezier.scad>;\n\n"
+        scad += "use <bezier.scad>; // download from https://www.thingiverse.com/thing:2207518\n\n"
         scad += "bezier_precision = -%.9f;\n" % tolerance
 
     if height > 0:
