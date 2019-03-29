@@ -1,9 +1,11 @@
 from __future__ import division
 import inflateutils.svgpath.shader as shader
 import inflateutils.svgpath.parser as parser
+import inflateutils.svgpath.path as svgpath
 import sys
 import getopt
 import cmath
+import math
 from inflateutils.exportmesh import *
 from random import sample
 
@@ -109,7 +111,12 @@ def message(string):
         sys.stderr.write(string + "\n")
     
 def sortedApproximatePaths(paths,error=0.1):
-    paths = [path.linearApproximation(error=error) for path in paths if len(path)]
+    def approximate(path):
+        p = path.linearApproximation(error=error)
+        p.originalPath = path
+        return p
+    
+    paths = [approximate(path) for path in paths if len(path)]
     
     def key(path):
         top = min(min(line.start.imag,line.end.imag) for line in path)
@@ -117,6 +124,9 @@ def sortedApproximatePaths(paths,error=0.1):
         return (top,left)
         
     return sorted(paths, key=key)
+
+class SubPath(list):
+    pass
 
 class PolygonData(object):
     def __init__(self,color,fillColor):
@@ -151,7 +161,8 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, leve
         polygon = PolygonData(color,fillColor)
         polygon.strokeWidth = path.svgState.strokeWidth;
         polygons.append(polygon)
-        for j,subpath in enumerate(path.breakup()):
+        for j,subpath0 in enumerate(path.originalPath.breakup()):
+            subpath = subpath0.linearApproximation(error=tolerance)
             points = [subpath[0].start+offset]
             polygon.updateBounds(points[-1])
             for line in subpath:
@@ -159,7 +170,9 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, leve
                 polygon.updateBounds(points[-1])
             if subpath.closed and points[0] != points[-1]:
                 points.append(points[0])
-            polygon.pointLists.append(points)
+            sp = SubPath(points)
+            sp.originalPath = subpath0
+            polygon.pointLists.append(sp)
         for points in polygon.pointLists:
             for j in range(len(points)):
                 points[j] -= polygon.getCenter()
@@ -198,6 +211,58 @@ def flattenLevels(levels):
     for level in levels:
         out += level
     return out
+
+def getBezier(path,offset,cpMode):
+    didBezier = False
+    b = []
+    
+    def addCoords(t,z):
+        z += offset
+        b.append("/*%s*/[%.9f,%.9f]" % (t,z.real,z.imag))
+        
+    def addCP(cp,node):
+        if cpMode[0] == 'a':
+            addCoords("CP",cp)
+        else: 
+            delta=cp-node
+            if cpMode[0] == 'p':
+                b.append("/*CP*/POLAR(%.9f,%.9f)"
+                         % (abs(delta),math.atan2(delta.imag,delta.real)*180/math.pi))
+            else:
+                b.append("/*CP*/OFFSET([%.9f,%.9f])" 
+                         % (delta.real,delta.imag))
+    
+    def addLine(start,end):
+        addCoords("N",start)
+        #addCoords("CP",(2*start+end)/3)
+        #addCoords("CP",end)
+        b.append("LINE()")
+        b.append("LINE()")
+
+    last = None
+    for p in path:
+        if isinstance(p,svgpath.CubicBezier):
+            addCoords("N",p.start)
+            addCP(p.control1,p.start)
+            addCP(p.control2,p.end)
+            last = p.end
+            didBezier = True
+        elif isinstance(p,svgpath.Line):
+            addLine(p.start,p.end)
+            last = p.end
+        else:
+            return None
+        
+    if last is None or not didBezier:
+        return None
+    
+    if path.closed and last != path.point(0):
+        addLine(last,path.point(0))
+        last = path.point(0)
+
+    addCoords("N",last)
+    
+    return ",".join(b)
     
 if __name__ == '__main__':
     outfile = None
@@ -209,11 +274,13 @@ if __name__ == '__main__':
     height = 10
     colors = True
     centerPage = False
+    cpMode = "none"
     
     def help(exitCode=0):
         help = """python svg2scad.py [options] filename.svg
 options:
 --help:         this message        
+--bezier=mode:  control point style: none [no Bezier library needed], absolute, offset or polar 
 --tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
 --ribbons:      make ribbons out of outlined paths
 --polygons:     make polygons out of shaded paths
@@ -233,7 +300,8 @@ options:
     try:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["help", "tolerance=", "ribbons", "polygons", "width=", "xpolygons=", "xribbons=",
-                        "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors="])
+                        "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors=",
+                        "bezier="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -254,6 +322,8 @@ options:
                 baseName = arg
             elif opt == "--ribbons":
                 doRibbons = True
+            elif opt == "--bezier":
+                cpMode = arg
             elif opt == "--xribbons":
                 doRibbons = (arg == "true" or arg == "1")
             elif opt == "--polygons":
@@ -287,6 +357,10 @@ options:
                     levels=doPolygons)
     
     scad = ""
+    
+    if cpMode[0] != 'n':
+        scad += "use <bezier.scad>;\n\n"
+        scad += "bezier_precision = -%.9f;\n" % tolerance
 
     if height > 0:
         scad += "height_%s = %.9f;\n" % (baseName, height)
@@ -314,7 +388,12 @@ options:
     for i,polygon in enumerate(polygons):
         scad += "// paths for %s\n" % polyName(i)
         for j,points in enumerate(polygon.pointLists):
-            scad += "points_" + subpathName(i,j) + " = [ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
+            scad += "points_" + subpathName(i,j) + " = "
+            b = cpMode[0] != 'n' and getBezier(points.originalPath,-polygon.getCenter(),cpMode)
+            if b:
+                scad += "Bezier(["+b+"],precision=bezier_precision);"
+            else:
+                scad += "[ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
         scad += "\n"
 
     objectNames = []

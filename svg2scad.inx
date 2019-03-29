@@ -18,6 +18,12 @@
       <param name="width" type="float" min="0" max="1000000.0" precision="3" _gui-text="Width (mm):" _gui-description="Ribbon width override (Default: 0=off)">0</param>
       <param name="xribbons" type="boolean" _gui-text="Generate ribbons for edges" _gui-description="This draws ribbons where there are colored edges.">1</param>
       <param name="xpolygons" type="boolean" _gui-text="Generate polygons for fill" _gui-description="This draws polygons where there is fill.">1</param>
+      <param name="bezier" type="enum" _gui-text="Bezier mode:" _gui-description="Bezier control point mode (Default: none)">
+        <item value="none">none</item>
+        <item value="absolute">absolute</item>
+        <item value="offset">offset</item>
+        <item value="polar">polar</item>
+      </param>
       <param name="xcenter-page" type="boolean" _gui-text="Center page at (0,0,0)" _gui-description="This centers the center of the Inkscape page at the origin in the OpenSCAD file.">1</param>
       <param name="xcolors" type="boolean" _gui-text="Include colors" _gui-description="This includes the colors from the Inkscape file.">1</param>
       <param name="name" type="string" _gui-text="OpenSCAD object identifier" _gui-description="All the variables will be tagged with what you put here.">svg</param>
