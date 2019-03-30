@@ -145,7 +145,7 @@ class PolygonData(object):
         return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
 
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, levels=False):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, levels=False, absolute=False):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
@@ -173,9 +173,10 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, leve
             sp = SubPath(points)
             sp.originalPath = subpath0
             polygon.pointLists.append(sp)
-        for points in polygon.pointLists:
-            for j in range(len(points)):
-                points[j] -= polygon.getCenter()
+        if not absolute:
+            for points in polygon.pointLists:
+                for j in range(len(points)):
+                    points[j] -= polygon.getCenter()
                 
         if levels:
             polygon.levels = getLevels(polygon.pointLists)
@@ -250,6 +251,12 @@ def getBezier(path,offset,cpMode):
         elif isinstance(p,svgpath.Line):
             addLine(p.start,p.end)
             last = p.end
+        elif isinstance(p,svgpath.QuadraticBezier):
+            addCoords("N",p.start)
+            addCP(p.start+(2./3)*(p.control-p.start),p.start)
+            addCP(p.end+(2./3)*(p.control-p.end),p.end)
+            last = p.end
+            didBezier = True
         else:
             return None
         
@@ -274,12 +281,14 @@ if __name__ == '__main__':
     height = 10
     colors = True
     centerPage = False
+    absolute = False
     cpMode = "none"
     
     def help(exitCode=0):
         help = """python svg2scad.py [options] filename.svg
 options:
 --help:         this message        
+--absolute:     all paths use absolute coordinates rather than translation
 --bezier=mode:  control point style: none [no Bezier library needed], absolute, offset or polar 
 --tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
 --ribbons:      make ribbons out of outlined paths
@@ -301,7 +310,7 @@ options:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["help", "tolerance=", "ribbons", "polygons", "width=", "xpolygons=", "xribbons=",
                         "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors=",
-                        "bezier="])
+                        "bezier=", "absolute", "xabsolute="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -324,6 +333,10 @@ options:
                 doRibbons = True
             elif opt == "--bezier":
                 cpMode = arg
+            elif opt == "--absolute":
+                absolute = True
+            elif opt == "--xabsolute":
+                absolute = (arg == "true" or arg == "1")
             elif opt == "--xribbons":
                 doRibbons = (arg == "true" or arg == "1")
             elif opt == "--polygons":
@@ -389,7 +402,7 @@ options:
         scad += "// paths for %s\n" % polyName(i)
         for j,points in enumerate(polygon.pointLists):
             scad += "points_" + subpathName(i,j) + " = "
-            b = cpMode[0] != 'n' and getBezier(points.originalPath,-polygon.getCenter(),cpMode)
+            b = cpMode[0] != 'n' and getBezier(points.originalPath,0j if absolute else -polygon.getCenter(),cpMode)
             if b:
                 scad += "Bezier(["+b+"],precision=bezier_precision);"
             else:
@@ -444,7 +457,12 @@ options:
             elif colors and objectName == 'ribbon' and polygons[i].color:
                 c = "color(color_%s) " % polyName(i)
                 
-            scad += c + extrude + ("translate(center_%s) %s_%s();\n" % (polyName(i), objectName, polyName(i)))
+            if absolute:
+                translate = ""
+            else:
+                translate = "translate(center_%s) " % polyName(i)
+                                    
+            scad += c + extrude + translate + "%s_%s();\n" % (objectName, polyName(i))
             
     if outfile:
         with open(outfile, "w") as f: f.write(scad)
