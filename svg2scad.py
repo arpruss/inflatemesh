@@ -7,6 +7,7 @@ import getopt
 import cmath
 import math
 from inflateutils.exportmesh import *
+from inflateutils.formatdecimal import decimal
 from random import sample
 
 quiet = False
@@ -219,7 +220,7 @@ def getBezier(path,offset,cpMode):
     
     def addCoords(t,z):
         z += offset
-        b.append("/*%s*/[%.9f,%.9f]" % (t,z.real,z.imag))
+        b.append("/*%s*/[%s,%s]" % (t,decimal(z.real),decimal(z.imag)))
         
     def addCP(cp,node):
         if cpMode[0] == 'a':
@@ -227,11 +228,11 @@ def getBezier(path,offset,cpMode):
         else: 
             delta=cp-node
             if cpMode[0] == 'p':
-                b.append("/*CP*/POLAR(%.9f,%.9f)"
-                         % (abs(delta),math.atan2(delta.imag,delta.real)*180/math.pi))
+                b.append("/*CP*/POLAR(%s,%s)"
+                         % (decimal(abs(delta)),decimal(math.atan2(delta.imag,delta.real)*180/math.pi)))
             else:
-                b.append("/*CP*/OFFSET([%.9f,%.9f])" 
-                         % (delta.real,delta.imag))
+                b.append("/*CP*/OFFSET([%s,%s])" 
+                         % (decimal(delta.real),decimal(delta.imag)))
     
     def addLine(start,end):
         addCoords("N",start)
@@ -373,13 +374,16 @@ options:
     
     if cpMode[0] != 'n':
         scad += "use <bezier.scad>; // download from https://www.thingiverse.com/thing:2207518\n\n"
-        scad += "bezier_precision = -%.9f;\n" % tolerance
+        scad += "bezier_precision = -%s;\n" % decimal(tolerance)
 
     if height > 0:
-        scad += "height_%s = %.9f;\n" % (baseName, height)
+        if doPolygons:
+            scad += "polygon_height_%s = %s;\n" % (baseName, decimal(height))
+        if doRibbons:
+            scad += "ribbon_height_%s = %s;\n" % (baseName, decimal(height))
         
     if width > 0:
-        scad += "width_%s = %.9f;\n" % (baseName, width)
+        scad += "width_%s = %s;\n" % (baseName, decimal(width))
         
     if len(scad):
         scad += "\n"
@@ -391,9 +395,9 @@ options:
         return polyName(i) + "_" + str(j+1)
         
     for i,polygon in enumerate(polygons):
-        scad += "center_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.getCenter().real, polygon.getCenter().imag)
-        scad += "size_%s = [%.9f,%.9f];\n" % (polyName(i), polygon.bounds[2]-polygon.bounds[0],polygon.bounds[3]-polygon.bounds[1])
-        scad += "stroke_width_%s = %.9f;\n" % (polyName(i), polygon.strokeWidth)
+        scad += "center_%s = [%s,%s];\n" % (polyName(i), decimal(polygon.getCenter().real), decimal(polygon.getCenter().imag))
+        scad += "size_%s = [%s,%s];\n" % (polyName(i), decimal(polygon.bounds[2]-polygon.bounds[0]), decimal(polygon.bounds[3]-polygon.bounds[1]))
+        scad += "stroke_width_%s = %s;\n" % (polyName(i), decimal(polygon.strokeWidth))
         if colors:
             scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
             scad += "fillcolor_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
@@ -406,7 +410,7 @@ options:
             if b:
                 scad += "Bezier(["+b+"],precision=bezier_precision);"
             else:
-                scad += "[ " + ','.join('[%.9f,%.9f]' % (point.real,point.imag) for point in points) + " ];\n"
+                scad += "[ " + ','.join('[%s,%s]' % (decimal(point.real),decimal(point.imag)) for point in points) + " ];\n"
         scad += "\n"
 
     objectNames = []
@@ -445,10 +449,12 @@ options:
             scad += " }\n}\n\n"
             
     if height > 0:
-        extrude = "linear_extrude(height=height_%s) " % baseName
+        polygonExtrude = "linear_extrude(height=polygon_height_%s) " % baseName
+        ribbonExtrude = "linear_extrude(height=ribbon_height_%s) " % baseName
     else:
-        extrude = ""
-            
+        polygonExtrude = ""
+        ribbonExtrude = ""
+
     for objectName in objectNames:
         for i in range(len(polygons)):
             c = "" if not colors else "//"
@@ -456,12 +462,14 @@ options:
                 c = "color(fillcolor_%s) " % polyName(i)
             elif colors and objectName == 'ribbon' and polygons[i].color:
                 c = "color(color_%s) " % polyName(i)
-                
+
             if absolute:
                 translate = ""
             else:
                 translate = "translate(center_%s) " % polyName(i)
-                                    
+
+            extrude = polygonExtrude if objectName == 'polygon' else ribbonExtrude
+                
             scad += c + extrude + translate + "%s_%s();\n" % (objectName, polyName(i))
             
     if outfile:

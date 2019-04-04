@@ -249,6 +249,7 @@ if __name__ == '__main__':
     gridSize = 15
     baseName = "svg"
     colors = True
+    clamp = 0
     centerPage = False
     
     def help(exitCode=0):
@@ -258,7 +259,9 @@ options:
 --stl:          output to STL (default: OpenSCAD)
 --rectangular:  use mesh over rectangular grid (default: hexagonal)
 --flatness=x:   make the top flatter; reasonable range: 0.0-10.0 (default: 0.0)
---height=x:     make the inflated stuff have height (or thickness) x millimeters (default: 10)
+--height=x:     inflate to height (or thickness) x millimeters (default: 10)
+--clamp=x:      clamp height down to x millimeters (default: 0, no clamping); making this be lower than
+                the inflationheight is another way to ensure a flattened top
 --exponent=x:   controls how rounded the inflated image is; must be bigger than 0.0 (default: 0.0)
 --resolution=n: approximate mesh resolution along the larger dimension (default: 15)
 --iterations=n: number of iterations in calculation (default depends on resolution)
@@ -278,7 +281,9 @@ options:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["tab=", "help", "stl", "rectangular", "mesh=", "flatness=", "name=", "height=", 
                         "exponent=", "resolution=", "format=", "iterations=", "width=", "xtwo-sided=", "two-sided", 
-                        "output=", "center-page", "xcenter-page=", "no-colors", "xcolors=", "noise=", "noise-exponent="])
+                        "output=", "center-page", "xcenter-page=", "no-colors", "xcolors=", "noise=", "noise-exponent=",
+                        "clamp="
+                        ])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -291,6 +296,8 @@ options:
                 sys.exit(0)
             elif opt == '--flatness':
                 params.flatness = float(arg)
+            elif opt == "--clamp":
+                params.clamp = float(arg)
             elif opt == '--height':
                 params.thickness = float(arg)
             elif opt == '--resolution':
@@ -358,16 +365,16 @@ options:
         for i,(name,mesh) in enumerate(data.meshes):
             mesh,centerX,centerY,width,height = recenterMesh(mesh)
             data.meshes[i] = (name,mesh)
-            scad += "center_%s = [%.5f,%.5f];\n" % (name,centerX,centerY)
-            scad += "size_%s = [%.5f,%.5f];\n" % (name,width,height)
-            scad += "color_%s = [%.5f,%.5f,%.5f];\n\n" % ((name,)+getColorFromMesh(mesh))
+            scad += "center_%s = [%s,%s];\n" % (name,decimal(centerX),decimal(centerY))
+            scad += "size_%s = [%s,%s];\n" % (name,decimal(width),decimal(height))
+            scad += "color_%s = %s;\n\n" % (name,describeColor(getColorFromMesh(mesh)))
             
         for name,mesh in data.meshes:
-            scad += toSCADModule(mesh, moduleName=name, coordinateFormat="%.5f", colorOverride="color_%s" % (name,))
+            scad += toSCADModule(mesh, moduleName=name, digitsAfterDecimal=5, colorOverride="")
             scad += "\n"
         
         for name,_ in data.meshes:
-            scad += "translate(center_%s) %s();\n" % (name,name)
+            scad += "translate(center_%s) color(color_%s) %s();\n" % (name,name,name)
             
         if outfile:
             with open(outfile, "w") as f: f.write(scad)

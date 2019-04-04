@@ -5,10 +5,10 @@ from random import uniform
 import itertools
 import os.path
 import math
-from multiprocessing import Process, Array
+#from multiprocessing import Process, Array
 
 class InflationParams(object):
-    def __init__(self, thickness=10., flatness=0., exponent=2., noise=0., iterations=None, hex=True):
+    def __init__(self, thickness=10., flatness=0., exponent=2., noise=0., iterations=None, hex=True, clamp=0.):
         self.thickness = thickness
         self.flatness = flatness
         self.exponent = exponent
@@ -16,6 +16,7 @@ class InflationParams(object):
         self.hex = hex
         self.noise = noise
         self.noiseExponent = 1.25
+        self.clamp = clamp
         
 class MeshData(object):
     def __init__(self, cols, rows):
@@ -66,7 +67,7 @@ class MeshData(object):
 class RectMeshData(MeshData):
     def __init__(self, width, height, lowerLeft, d):
         MeshData.__init__(self, 1+int(width / d), 1+int(height / d))
-        self.lowerLeft = lowerLeft
+        self.lowerLeft = Vector(lowerLeft)
         self.d = d
         self.numNeighbors = 4
         self.deltas = (Vector(-1,0),Vector(1,0),Vector(0,-1),Vector(0,1))
@@ -125,7 +126,7 @@ class HexMeshData(MeshData):
     def __init__(self, width, height, lowerLeft, d):
         self.hd = d
         self.vd = d * math.sqrt(3) / 2.
-        self.lowerLeft = lowerLeft + Vector(-self.hd*0.25, self.vd*0.5)
+        self.lowerLeft = Vector(lowerLeft) + Vector(-self.hd*0.25, self.vd*0.5)
 #        height += 10
 #        width += 10
         MeshData.__init__(self, 2+int(width / self.hd), 2+int(height / self.vd))
@@ -313,5 +314,9 @@ def inflateRaster(meshData, inflationParams=InflationParams(), distanceToEdge=No
             if y >= size:
                 y = size-1
             meshData.data[col][row] += noise[x][y]
+            
+    if inflationParams.clamp:
+        for col,row in meshData.getPoints():
+            meshData.data[col][row] = min(meshData.data[col][row],inflationParams.clamp)
 
 #diamondSquare(2)            

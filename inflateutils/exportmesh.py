@@ -1,5 +1,6 @@
 from struct import pack
 from .vector import *
+from .formatdecimal import decimal
 from numbers import Number 
 import os
 import sys
@@ -34,9 +35,9 @@ def describeColor(c):
     elif isinstance(c, str):
         return c
     else:
-        return "[%.5f,%.5f,%.5f]" % tuple(c)
+        return "[%s,%s,%s]" % tuple(decimal(component) for component in c)
 
-def toSCADModule(polys, moduleName, coordinateFormat="%.9f", colorOverride=None):
+def toSCADModule(polys, moduleName, digitsAfterDecimal=9, colorOverride=None):
     """
     INPUT:
     polys: list of (color,polyhedra) pairs (counterclockwise triangles), or a list of (color,triangle) pairs (TODO: currently uses first color for all in latter case)
@@ -50,7 +51,7 @@ def toSCADModule(polys, moduleName, coordinateFormat="%.9f", colorOverride=None)
     scad = []
     scad.append("module " +moduleName+ "() {")
     for rgb,poly in polys:
-        if colorOverride or rgb:
+        if colorOverride != "" and (colorOverride or rgb):
             line = "  color(%s) " % describeColor(colorOverride if colorOverride else tuple(min(max(c,0.),1.0) for c in rgb))
         else:
             line = "  "
@@ -62,7 +63,7 @@ def toSCADModule(polys, moduleName, coordinateFormat="%.9f", colorOverride=None)
             for v in reversed(face):
                 if tuple(v) not in pointsDict:
                     pointsDict[tuple(v)] = i
-                    points.append( ("[" + coordinateFormat + "," + coordinateFormat + "," + coordinateFormat + "]") % tuple(v) )
+                    points.append( ("[%s,%s,%s]") % tuple(decimal(x,digitsAfterDecimal) for x in v) )
                     i += 1
         line += ",".join(points)
         line += "], faces=["
