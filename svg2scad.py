@@ -142,11 +142,15 @@ class PolygonData(object):
         self.bounds[2] = max(self.bounds[2], z.real)
         self.bounds[3] = max(self.bounds[3], z.imag)
 
-    def getCenter(self):
-        return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
-
+    def getAnchor(self, mode):
+        if mode[0] == "a":
+            return 0j
+        elif mode[0] == 'l':
+            return complex(self.bounds[0],self.bounds[1])
+        else: # mode[0] == 'c':
+            return complex(0.5*(self.bounds[0]+self.bounds[2]),0.5*(self.bounds[1]+self.bounds[3]))
     
-def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, levels=False, absolute=False):
+def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, levels=False, absolute=False, align="center"):
     polygons = []
 
     paths = sortedApproximatePaths(paths, error=tolerance )
@@ -177,7 +181,7 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, leve
         if not absolute:
             for points in polygon.pointLists:
                 for j in range(len(points)):
-                    points[j] -= polygon.getCenter()
+                    points[j] -= polygon.getAnchor(align)
                 
         if levels:
             polygon.levels = getLevels(polygon.pointLists)
@@ -282,14 +286,14 @@ if __name__ == '__main__':
     height = 10
     colors = True
     centerPage = False
-    absolute = False
+    align = "center"
     cpMode = "none"
     
     def help(exitCode=0):
         help = """python svg2scad.py [options] filename.svg
 options:
---help:         this message        
---absolute:     all paths use absolute coordinates rather than translation
+--help:         this message
+--align=mode:   object alignment mode: center [default], lowerleft, absolute
 --bezier=mode:  control point style: none [no Bezier library needed], absolute, offset or polar 
 --tolerance=x:  when linearizing paths, keep them within x millimeters of correct position (default: 0.1)
 --ribbons:      make ribbons out of outlined paths
@@ -311,7 +315,7 @@ options:
         opts, args = getopt.getopt(sys.argv[1:], "h", 
                         ["help", "tolerance=", "ribbons", "polygons", "width=", "xpolygons=", "xribbons=",
                         "height=", "tab=", "name=", "center-page", "xcenter-page=", "no-colors", "xcolors=",
-                        "bezier=", "absolute", "xabsolute="])
+                        "bezier=", "align="])
 
         if len(args) == 0:
             raise getopt.GetoptError("invalid commandline")
@@ -334,8 +338,8 @@ options:
                 doRibbons = True
             elif opt == "--bezier":
                 cpMode = arg
-            elif opt == "--absolute":
-                absolute = True
+            elif opt == "--align":
+                align = arg
             elif opt == "--xabsolute":
                 absolute = (arg == "true" or arg == "1")
             elif opt == "--xribbons":
@@ -368,7 +372,7 @@ options:
         offset = 0
         
     polygons = extractPaths(paths, offset, tolerance=tolerance, baseName=baseName, colors=colors, 
-                    levels=doPolygons)
+                    levels=doPolygons, align=align)
     
     scad = ""
     
@@ -395,7 +399,8 @@ options:
         return polyName(i) + "_" + str(j+1)
         
     for i,polygon in enumerate(polygons):
-        scad += "center_%s = [%s,%s];\n" % (polyName(i), decimal(polygon.getCenter().real), decimal(polygon.getCenter().imag))
+        if (align[0] != 'a'):
+            scad += "position_%s = [%s,%s];\n" % (polyName(i), decimal(polygon.getAnchor(align).real), decimal(polygon.getAnchor(align).imag))
         scad += "size_%s = [%s,%s];\n" % (polyName(i), decimal(polygon.bounds[2]-polygon.bounds[0]), decimal(polygon.bounds[3]-polygon.bounds[1]))
         scad += "stroke_width_%s = %s;\n" % (polyName(i), decimal(polygon.strokeWidth))
         if colors:
@@ -406,7 +411,7 @@ options:
         scad += "// paths for %s\n" % polyName(i)
         for j,points in enumerate(polygon.pointLists):
             scad += "points_" + subpathName(i,j) + " = "
-            b = cpMode[0] != 'n' and getBezier(points.originalPath,0j if absolute else -polygon.getCenter(),cpMode)
+            b = cpMode[0] != 'n' and getBezier(points.originalPath,-polygon.getAnchor(align),cpMode)
             if b:
                 scad += "Bezier(["+b+"],precision=bezier_precision);"
             else:
@@ -466,7 +471,7 @@ options:
             if absolute:
                 translate = ""
             else:
-                translate = "translate(center_%s) " % polyName(i)
+                translate = "translate(position_%s) " % polyName(i)
 
             extrude = polygonExtrude if objectName == 'polygon' else ribbonExtrude
                 

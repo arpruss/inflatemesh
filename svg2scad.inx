@@ -24,6 +24,11 @@
         <item value="offset">offset</item>
         <item value="polar">polar</item>
       </param>
+      <param name="align" type="enum" _gui-text="Object alignment:" _gui-description="Object alignment mode (Default: object center)">
+        <item value="center">object center</item>
+        <item value="lowerleft">object lower left</item>
+        <item value="absolute">absolute page coordinates</item>
+      </param>
       <param name="xabsolute" type="boolean" _gui-text="Use absolute coordinates for all paths" _gui-description="This uses absolute coordinates for each object instead of translate() in the OpenSCAD file.">0</param>
       <param name="xcenter-page" type="boolean" _gui-text="Center page at (0,0,0)" _gui-description="This centers the center of the Inkscape page at the origin in the OpenSCAD file.">1</param>
       <param name="xcolors" type="boolean" _gui-text="Include colors" _gui-description="This includes the colors from the Inkscape file.">1</param>
