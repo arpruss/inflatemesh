@@ -468,7 +468,7 @@ options:
             elif colors and objectName == 'ribbon' and polygons[i].color:
                 c = "color(color_%s) " % polyName(i)
 
-            if absolute:
+            if align[0] == 'a':
                 translate = ""
             else:
                 translate = "translate(position_%s) " % polyName(i)
