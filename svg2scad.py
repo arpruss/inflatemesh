@@ -188,10 +188,16 @@ def extractPaths(paths, offset, tolerance=0.1, baseName="svg", colors=True, leve
             polygon.pointLists = flattenLevels(polygon.levels)
 
     return polygons
-    
+
 def toNestedPolygons(levels, name, i=0, indent=4):
     def spaces():
         return ' '*indent
+
+    def polygonPaths(paths, i):
+        return "polygonWithHoles([" + ",".join((name(i+j) for j in range(len(paths)))) + "])"
+
+    if len(levels) == 2 and len(levels[0])==1:
+        return spaces() + polygonPaths(levels[0] + levels[1], i) + ";\n"
     out = ""
     if len(levels)>1:
         out += spaces() + "difference() {\n"
@@ -201,7 +207,7 @@ def toNestedPolygons(levels, name, i=0, indent=4):
         indent += 2
     for poly in levels[0]:
         if closed(poly):
-            out += spaces() + "polygon(points=%s);\n" % name(i)
+            out += spaces() + "polygon(%s);\n" % name(i)
         i += 1
     if len(levels[0])>1:
         indent -= 2
@@ -406,15 +412,30 @@ options:
         if colors:
             scad += "color_%s = %s;\n" % (polyName(i), describeColor(polygon.color))
             scad += "fillcolor_%s = %s;\n" % (polyName(i), describeColor(polygon.fillColor))
+            
+    if doPolygons:
+        scad += """
+module polygonWithHoles(paths) {
+  points = [for(path=paths) for(p=path) p];
+  function cumulativeLengths(paths,n=0,soFar=[0]) =
+    n >= len(paths)-1 ? soFar :
+    cumulativeLengths(paths,n=n+1,soFar=concat(soFar,[soFar[n]+len(paths[n])]));
+  offsets = cumulativeLengths(paths);
+  indices = [for(i=[0:1:len(paths)-1]) [for(j=[0:1:len(paths[i])-1]) offsets[i]+j]];
+  polygon(points=points, paths=indices);
+}
+
+"""
         
     for i,polygon in enumerate(polygons):
         scad += "// paths for %s\n" % polyName(i)
         for j,points in enumerate(polygon.pointLists):
-            scad += "points_" + subpathName(i,j) + " = "
             b = cpMode[0] != 'n' and getBezier(points.originalPath,-polygon.getAnchor(align),cpMode)
             if b:
-                scad += "Bezier(["+b+"],precision=bezier_precision);"
+                scad += "bezier_" + subpathName(i,j) + " = ["+b+"];\n"
+                scad += "points_" + subpathName(i,j) + " = Bezier(bezier_"+subpathName(i,j)+",precision=bezier_precision);"
             else:
+                scad += "points_" + subpathName(i,j) + " = "
                 scad += "[ " + ','.join('[%s,%s]' % (decimal(point.real),decimal(point.imag)) for point in points) + " ];\n"
         scad += "\n"
 
